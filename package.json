@@ -2,7 +2,7 @@
   "name": "book-tracker",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://venkateshyerram.github.io/book-tracker",
+  "homepage": "https://venkateshyerram.github.io/Tracker",
   "dependencies": {
     "@craco/craco": "^7.1.0",
     "@emotion/react": "^11.11.3",
