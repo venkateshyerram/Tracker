@@ -304,9 +304,68 @@ const Home: React.FC = () => {
           '#0bceaf',
           '#2c3e50',
           '#e74c3c',
+          '#9b59b6',
+          '#f39c12'
         ],
+        borderColor: '#1a1a1a',
+        borderWidth: 2,
+        borderRadius: 4,
+        barThickness: 40,
       },
     ],
+  };
+
+  const statusChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: '#0bceaf',
+        borderWidth: 1,
+        padding: 10,
+        displayColors: false,
+        callbacks: {
+          label: function(context: any) {
+            const value = context.raw;
+            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+            const percentage = ((value / total) * 100).toFixed(1);
+            return `${value} books (${percentage}%)`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+          drawBorder: false
+        },
+        ticks: {
+          color: 'rgba(255, 255, 255, 0.7)',
+          font: {
+            size: 12
+          }
+        }
+      },
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          color: 'rgba(255, 255, 255, 0.7)',
+          font: {
+            size: 12
+          }
+        }
+      }
+    }
   };
 
   return (
@@ -508,7 +567,8 @@ const Home: React.FC = () => {
                 p: 3, 
                 bgcolor: '#1a1a1a', 
                 color: 'white',
-                background: 'linear-gradient(to bottom right,#000,#000 75%,#0bceaf)!important'
+                background: 'linear-gradient(to bottom right,#000,#000 75%,#0bceaf)!important',
+                boxShadow: '0 4px 15px #0bceaf26'
               }}>
                 <Typography variant="h5" gutterBottom sx={{ color: '#0bceaf' }}>
                   Reading Statistics
@@ -718,7 +778,8 @@ const Home: React.FC = () => {
                 height: 400, 
                 bgcolor: '#1a1a1a', 
                 color: 'white',
-                position: 'relative'
+                position: 'relative',
+                boxShadow: '0 4px 15px #0bceaf26'
               }}>
                 <Typography variant="h6" gutterBottom>
                   Books by Genre
@@ -767,7 +828,8 @@ const Home: React.FC = () => {
                 height: 400, 
                 bgcolor: '#1a1a1a', 
                 color: 'white',
-                overflow: 'auto'
+                overflow: 'auto',
+                boxShadow: '0 4px 15px #0bceaf26'
               }}>
                 <Typography variant="h6" gutterBottom>
                   Currently Reading
@@ -876,12 +938,12 @@ const Home: React.FC = () => {
               </Paper>
             </Grid>
             <Grid item xs={12}>
-              <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 400, bgcolor: '#1a1a1a', color: 'white' }}>
+              <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 400, bgcolor: '#1a1a1a', color: 'white', boxShadow: '0 4px 15px #0bceaf26' }}>
                 <Typography variant="h6" gutterBottom>
                   Reading Status
                 </Typography>
-                <Box flex={1} display="flex" justifyContent="center" alignItems="center">
-                  <Pie data={statusChartData} />
+                <Box flex={1} display="flex" justifyContent="center" alignItems="center" sx={{ p: 2 }}>
+                  <Bar data={statusChartData} options={statusChartOptions} />
                 </Box>
               </Paper>
             </Grid>

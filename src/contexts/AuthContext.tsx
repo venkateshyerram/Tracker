@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
   User,
-  fetchSignInMethodsForEmail
+  setPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { auth } from '../config/firebase';
 
 interface AuthContextType {
+  currentUser: User | null;
   user: User | null;
   loading: boolean;
   error: Error | null;
@@ -31,84 +31,103 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const auth = getAuth();
 
+  // Set up auth state listener
   useEffect(() => {
-    console.log('Setting up auth state listener');
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('Auth state changed:', user?.uid);
-      setUser(user);
+    if (!auth) {
+      console.error('Firebase auth is not initialized');
+      setError(new Error('Firebase auth is not initialized'));
       setLoading(false);
-    });
+      return;
+    }
 
-    return () => {
-      console.log('Cleaning up auth state listener');
-      unsubscribe();
+    const unsubscribe = onAuthStateChanged(auth, 
+      (user) => {
+        setCurrentUser(user);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Auth state change error:', error);
+        setError(error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Enable persistence
+  useEffect(() => {
+    const enablePersistence = async () => {
+      if (!auth) {
+        console.error('Firebase auth is not initialized');
+        return;
+      }
+
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        console.log('Auth persistence enabled');
+      } catch (error) {
+        console.error('Error enabling auth persistence:', error);
+        setError(error as Error);
+      }
     };
-  }, [auth]);
+
+    enablePersistence();
+  }, []);
 
   const login = async (email: string, password: string) => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
+
     try {
       setError(null);
-      console.log('Attempting login for:', email);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('Login successful for user:', userCredential.user.uid);
-    } catch (err) {
-      console.error('Login error:', err);
-      setError(err as Error);
-      throw err;
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error('Login error:', error);
+      setError(error as Error);
+      throw error;
     }
   };
 
   const register = async (email: string, password: string, username: string) => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
+
     try {
       setError(null);
-      console.log('Attempting registration for:', email);
-
-      // First check if the email is already registered
-      const methods = await fetchSignInMethodsForEmail(auth, email);
-      if (methods && methods.length > 0) {
-        const error = new Error('An account with this email already exists. Please login instead.');
-        setError(error);
-        throw error;
-      }
-
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      console.log('Registration successful for user:', user.uid);
-      
-      // Create user document in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        username,
-        email,
-        createdAt: new Date().toISOString()
-      });
-      console.log('User document created in Firestore');
-    } catch (err) {
-      console.error('Registration error:', err);
-      setError(err as Error);
-      throw err;
+      console.log('User registered:', userCredential.user);
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError(error as Error);
+      throw error;
     }
   };
 
   const logout = async () => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
+
     try {
       setError(null);
-      console.log('Attempting logout for user:', user?.uid);
       await signOut(auth);
-      console.log('Logout successful');
-    } catch (err) {
-      console.error('Logout error:', err);
-      setError(err as Error);
-      throw err;
+    } catch (error) {
+      console.error('Logout error:', error);
+      setError(error as Error);
+      throw error;
     }
   };
 
   const value = {
-    user,
+    currentUser,
+    user: currentUser,
     loading,
     error,
     login,
@@ -118,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 }; 

@@ -17,6 +17,39 @@ import SearchModal from './components/shared/SearchModal';
 // Create a client
 const queryClient = new QueryClient();
 
+// Error boundary component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Typography color="error">
+            Something went wrong. Please refresh the page.
+          </Typography>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const AppContent = () => {
   const { user, loading, error } = useAuth();
   const { openSearchModal, isSearchModalOpen, closeSearchModal } = useSearch();
@@ -57,67 +90,67 @@ const AppContent = () => {
   }
 
   return (
-    <Router>
-      <div className="App">
-        {user && (
-          <Box
-            sx={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 1000,
-              transition: 'opacity 0.3s ease-in-out',
-              opacity: scrollPosition > 100 ? 0.8 : 1,
-              '&:hover': {
-                opacity: 1,
-              },
-            }}
-          >
-            <Navbar onSearchClick={openSearchModal} />
-          </Box>
-        )}
-        <Routes>
-          <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
-          <Route path="/" element={user ? <Home /> : <Navigate to="/login" />} />
-          <Route path="/tracker" element={user ? <Tracker /> : <Navigate to="/login" />} />
-        </Routes>
-        <SearchModal
-          open={isSearchModalOpen}
-          onClose={closeSearchModal}
-          onBookSelect={(book) => {
-            // Handle book selection based on current route
-            const currentPath = window.location.pathname;
-            console.log('Book selected in path:', currentPath);
-            
-            // Dispatch the event to the document
-            const event = new CustomEvent('bookSelected', { 
-              detail: book,
-              bubbles: true,
-              composed: true
-            });
-            document.dispatchEvent(event);
-            console.log('Book selection event dispatched');
+    <div className="App">
+      {user && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            transition: 'opacity 0.3s ease-in-out',
+            opacity: scrollPosition > 100 ? 0.8 : 1,
+            '&:hover': {
+              opacity: 1,
+            },
           }}
-        />
-      </div>
-    </Router>
+        >
+          <Navbar onSearchClick={openSearchModal} />
+        </Box>
+      )}
+      <Routes>
+        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+        <Route path="/register" element={!user ? <Register /> : <Navigate to="/login" />} />
+        <Route path="/" element={user ? <Home /> : <Navigate to="/login" />} />
+        <Route path="/tracker" element={user ? <Tracker /> : <Navigate to="/login" />} />
+      </Routes>
+      <SearchModal
+        open={isSearchModalOpen}
+        onClose={closeSearchModal}
+        onBookSelect={(book) => {
+          const currentPath = window.location.pathname;
+          console.log('Book selected in path:', currentPath);
+          
+          const event = new CustomEvent('bookSelected', { 
+            detail: book,
+            bubbles: true,
+            composed: true
+          });
+          document.dispatchEvent(event);
+          console.log('Book selection event dispatched');
+        }}
+      />
+    </div>
   );
 };
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <AuthProvider>
-          <SearchProvider>
-            <AppContent />
-          </SearchProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <AuthProvider>
+            <SearchProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </SearchProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

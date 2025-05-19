@@ -59,7 +59,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
               gap: 1
             }}
           >
-            BookTracker
+            Tracker
           </Typography>
 
           {user && (
@@ -99,7 +99,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
                   },
                 }}
               >
-                Tracker
+                Book Tracker
               </Button>
               <Button
                 color="inherit"

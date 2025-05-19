@@ -22,7 +22,8 @@
     "baseUrl": "src",
     "paths": {
       "@contexts/*": ["contexts/*"]
-    }
+    },
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   },
   "include": [
     "src"
