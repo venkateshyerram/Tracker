@@ -894,132 +894,136 @@ const Tracker: React.FC = () => {
                                           {status} ({getBooksByStatus(status).length})
                                         </Typography>
                                       </Box>
-                                      {getBooksByStatus(status).map((book) => (
-                                        <TableRow
-                                          key={book.id}
-                                          sx={{
-                                            '&:hover': {
-                                              bgcolor: 'rgba(255, 255, 255, 0.05)',
-                                              '& .action-menu': {
-                                                opacity: 1,
-                                              },
-                                            },
-                                            '& td': {
-                                              borderColor: 'rgba(255,255,255,0.1)',
-                                              color: 'white',
-                                              p: 2,
-                                            },
-                                          }}
-                                        >
-                                          <TableCell width="80px">
-                                            <Box sx={{ position: 'relative', width: 60, height: 90 }}>
-                                              <Avatar
-                                                variant="rounded"
-                                                src={book.coverUrl}
-                                                alt={book.title}
-                                                sx={{ width: '100%', height: '100%' }}
-                                              />
-                                              <IconButton
-                                                size="small"
-                                                className="action-menu"
-                                                sx={{
-                                                  position: 'absolute',
-                                                  top: '50%',
-                                                  left: '50%',
-                                                  transform: 'translate(-50%, -50%)',
-                                                  bgcolor: 'rgba(0, 0, 0, 0.7)',
-                                                  opacity: 0,
-                                                  transition: 'opacity 0.2s',
-                                                  width: 24,
-                                                  height: 24,
-                                                  '&:hover': {
-                                                    bgcolor: 'rgba(0, 0, 0, 0.8)',
+                                      <Table>
+                                        <TableBody>
+                                          {getBooksByStatus(status).map((book) => (
+                                            <TableRow
+                                              key={book.id}
+                                              sx={{
+                                                '&:hover': {
+                                                  bgcolor: 'rgba(255, 255, 255, 0.05)',
+                                                  '& .action-menu': {
+                                                    opacity: 1,
                                                   },
-                                                  '& svg': {
-                                                    color: 'white',
-                                                    fontSize: '1rem',
-                                                  },
-                                                }}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleEditClick(book);
-                                                }}
-                                              >
-                                                <MoreHorizIcon />
-                                              </IconButton>
-                                            </Box>
-                                          </TableCell>
-                                          <TableCell width="20%">
-                                            <Typography 
-                                              variant="subtitle1" 
-                                              sx={{ 
-                                                color: 'white',
-                                                wordBreak: 'break-word',
-                                              }}
-                                            >
-                                              {book.title}
-                                            </Typography>
-                                          </TableCell>
-                                          <TableCell width="15%">
-                                            <Typography 
-                                              variant="body2" 
-                                              sx={{ 
-                                                color: 'rgba(255,255,255,0.7)',
-                                                wordBreak: 'break-word',
-                                              }}
-                                            >
-                                              {book.author}
-                                            </Typography>
-                                          </TableCell>
-                                          <TableCell width="15%">
-                                            <Typography 
-                                              variant="body2" 
-                                              sx={{ 
-                                                color: 'rgba(255,255,255,0.7)',
-                                                wordBreak: 'break-word',
-                                              }}
-                                            >
-                                              {book.genres?.join(', ') || 'Fiction'}
-                                            </Typography>
-                                          </TableCell>
-                                          <TableCell width="15%">
-                                            {book.status === 'reading' || book.status === 're-reading' || book.status === 'completed' ? (
-                                              <Typography 
-                                                variant="body2" 
-                                                sx={{ 
+                                                },
+                                                '& td': {
+                                                  borderColor: 'rgba(255,255,255,0.1)',
                                                   color: 'white',
-                                                  whiteSpace: 'nowrap',
-                                                }}
-                                              >
-                                                {book.currentPage} / {book.pageCount} pages
-                                              </Typography>
-                                            ) : (
-                                              <Typography 
-                                                variant="body2" 
-                                                sx={{ 
-                                                  color: 'rgba(255,255,255,0.7)',
-                                                }}
-                                              >
-                                                -
-                                              </Typography>
-                                            )}
-                                          </TableCell>
-                                          <TableCell width="15%">
-                                            <Rating value={book.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
-                                          </TableCell>
-                                          <TableCell width="10%">
-                                            <Typography 
-                                              variant="body2" 
-                                              sx={{ 
-                                                color: 'white',
-                                                textAlign: 'center',
+                                                  p: 2,
+                                                },
                                               }}
                                             >
-                                              {book.timesRead || 0}
-                                            </Typography>
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
+                                              <TableCell width="80px">
+                                                <Box sx={{ position: 'relative', width: 60, height: 90 }}>
+                                                  <Avatar
+                                                    variant="rounded"
+                                                    src={book.coverUrl}
+                                                    alt={book.title}
+                                                    sx={{ width: '100%', height: '100%' }}
+                                                  />
+                                                  <IconButton
+                                                    size="small"
+                                                    className="action-menu"
+                                                    sx={{
+                                                      position: 'absolute',
+                                                      top: '50%',
+                                                      left: '50%',
+                                                      transform: 'translate(-50%, -50%)',
+                                                      bgcolor: 'rgba(0, 0, 0, 0.7)',
+                                                      opacity: 0,
+                                                      transition: 'opacity 0.2s',
+                                                      width: 24,
+                                                      height: 24,
+                                                      '&:hover': {
+                                                        bgcolor: 'rgba(0, 0, 0, 0.8)',
+                                                      },
+                                                      '& svg': {
+                                                        color: 'white',
+                                                        fontSize: '1rem',
+                                                      },
+                                                    }}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleEditClick(book);
+                                                    }}
+                                                  >
+                                                    <MoreHorizIcon />
+                                                  </IconButton>
+                                                </Box>
+                                              </TableCell>
+                                              <TableCell width="20%">
+                                                <Typography 
+                                                  variant="subtitle1" 
+                                                  sx={{ 
+                                                    color: 'white',
+                                                    wordBreak: 'break-word',
+                                                  }}
+                                                >
+                                                  {book.title}
+                                                </Typography>
+                                              </TableCell>
+                                              <TableCell width="15%">
+                                                <Typography 
+                                                  variant="body2" 
+                                                  sx={{ 
+                                                    color: 'rgba(255,255,255,0.7)',
+                                                    wordBreak: 'break-word',
+                                                  }}
+                                                >
+                                                  {book.author}
+                                                </Typography>
+                                              </TableCell>
+                                              <TableCell width="15%">
+                                                <Typography 
+                                                  variant="body2" 
+                                                  sx={{ 
+                                                    color: 'rgba(255,255,255,0.7)',
+                                                    wordBreak: 'break-word',
+                                                  }}
+                                                >
+                                                  {book.genres?.join(', ') || 'Fiction'}
+                                                </Typography>
+                                              </TableCell>
+                                              <TableCell width="15%">
+                                                {book.status === 'reading' || book.status === 're-reading' || book.status === 'completed' ? (
+                                                  <Typography 
+                                                    variant="body2" 
+                                                    sx={{ 
+                                                      color: 'white',
+                                                      whiteSpace: 'nowrap',
+                                                    }}
+                                                  >
+                                                    {book.currentPage} / {book.pageCount} pages
+                                                  </Typography>
+                                                ) : (
+                                                  <Typography 
+                                                    variant="body2" 
+                                                    sx={{ 
+                                                      color: 'rgba(255,255,255,0.7)',
+                                                    }}
+                                                  >
+                                                    -
+                                                  </Typography>
+                                                )}
+                                              </TableCell>
+                                              <TableCell width="15%">
+                                                <Rating value={book.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
+                                              </TableCell>
+                                              <TableCell width="10%">
+                                                <Typography 
+                                                  variant="body2" 
+                                                  sx={{ 
+                                                    color: 'white',
+                                                    textAlign: 'center',
+                                                  }}
+                                                >
+                                                  {book.timesRead || 0}
+                                                </Typography>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </TableBody>
+                                      </Table>
                                     </Box>
                                   </TableCell>
                                 </TableRow>
