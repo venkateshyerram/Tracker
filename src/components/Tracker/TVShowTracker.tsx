@@ -47,10 +47,9 @@ import {
   SelectChangeEvent
 } from '@mui/material';
 import { useQuery, useQueryClient } from 'react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
-import { bookService } from '../../services/bookService';
-import { Book, ReadingStatus, BookSearchResult } from '../../types/book';
+import { tvshowService } from '../../services/tvshowService';
+import { TVShow, TVShowStatus, TVShowSearchResult } from '../../types/tvshow';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -59,114 +58,57 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { CircularProgress } from '@mui/material';
-import { useBooks } from '../../hooks/useBooks';
+import { useTVShows } from '../../hooks/useTVShows';
 import { useSearch } from '../../contexts/SearchContext';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import SortIcon from '@mui/icons-material/Sort';
-import SearchModal from '../shared/SearchModal';
-import { bookSearchService } from '../../services/bookSearchService';
 import SearchIcon from '@mui/icons-material/Search';
+import TVShowSearchModal from '../shared/TVShowSearchModal';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
+const STATUS_ORDER: TVShowStatus[] = ['watching', 'paused', 'planning', 'completed', 're-watching'];
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`book-tabpanel-${index}`}
-      aria-labelledby={`book-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
-const STATUS_ORDER: ReadingStatus[] = ['reading', 'paused', 'planning', 'completed', 're-reading'];
-
-const Tracker: React.FC = () => {
+const TVShowTracker: React.FC = () => {
   const { user } = useAuth();
-  const { books: userBooks, loading: booksLoading, error: booksError } = useBooks();
-  const { openSearchModal, closeSearchModal } = useSearch();
+  const { tvshows: userTVShows, loading: tvshowsLoading, error: tvshowsError } = useTVShows();
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
-  const [bookDetails, setBookDetails] = useState<Partial<Book>>({
+  const [selectedTVShow, setSelectedTVShow] = useState<TVShowSearchResult | null>(null);
+  const [tvshowDetails, setTVShowDetails] = useState<Partial<TVShow>>({
     status: 'planning',
-    timesRead: 0,
+    timesWatched: 0,
     rating: 0,
-    currentPage: 0
+    currentSeason: 1,
+    currentEpisode: 1
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedBookForEdit, setSelectedBookForEdit] = useState<Book | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<ReadingStatus[]>(['reading', 'paused', 'planning', 'completed', 're-reading']);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [selectedTVShowForEdit, setSelectedTVShowForEdit] = useState<TVShow | null>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<TVShowStatus[]>(['watching', 'paused', 'planning', 'completed', 're-watching']);
+  const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
+  const [selectedNetworks, setSelectedNetworks] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([1900, new Date().getFullYear()]);
-  const [sortBy, setSortBy] = useState('title');
+  const [sortBy, setSortBy] = useState<'title' | 'firstAirDate' | 'rating'>('title');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const queryClient = useQueryClient();
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Predefined genres
   const predefinedGenres = [
-    'Fiction',
-    'Non-Fiction',
-    'Mystery',
-    'Science Fiction',
-    'Fantasy',
-    'Romance',
-    'Thriller',
-    'Horror',
-    'Biography',
-    'History',
-    'Science',
-    'Technology',
-    'Philosophy',
-    'Psychology',
-    'Self-Help',
-    'Business',
-    'Poetry',
-    'Drama',
-    'Comedy',
-    'Adventure',
-    'Crime',
-    'Young Adult',
-    'Children',
-    'Classic',
-    'Contemporary',
-    'Literary Fiction',
-    'Historical Fiction',
-    'Dystopian',
-    'Memoir',
-    'Cookbook',
-    'Art',
-    'Music',
-    'Sports',
-    'Travel',
-    'Religion',
-    'Spirituality',
-    'Education',
-    'Reference',
-    'Other'
+    'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
+    'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery',
+    'Romance', 'Science Fiction', 'Thriller', 'War', 'Western', 'Biography',
+    'Sport', 'Musical', 'Reality', 'Talk Show', 'Game Show', 'News'
   ];
 
-  // Get all unique genres from books
+  // Get all unique genres from TV shows
   const getAllGenres = () => {
-    const bookGenres = new Set<string>();
-    userBooks.forEach(book => {
-      if (book.genres) {
-        book.genres.forEach(genre => bookGenres.add(genre));
+    const tvshowGenres = new Set<string>();
+    userTVShows.forEach(tvshow => {
+      if (tvshow.genres) {
+        tvshow.genres.forEach(genre => tvshowGenres.add(genre));
       }
     });
-    return Array.from(bookGenres);
+    return Array.from(tvshowGenres);
   };
 
   // Combine predefined and custom genres
@@ -174,150 +116,126 @@ const Tracker: React.FC = () => {
     const customGenres = getAllGenres();
     const combinedGenres = new Set([...predefinedGenres, ...customGenres]);
     return Array.from(combinedGenres).sort();
-  }, [userBooks]);
+  }, [userTVShows]);
 
-  useEffect(() => {
-    const handleBookSelected = (event: CustomEvent<BookSearchResult>) => {
-      console.log('Book selected event received:', event.detail);
-      if (window.location.pathname === '/tracker') {
-        handleBookSelect(event.detail);
-      }
-    };
+  // Get unique creators and networks from TV shows
+  const uniqueCreators = Array.from(new Set(userTVShows.flatMap(tvshow => tvshow.createdBy || [])));
+  const uniqueNetworks = Array.from(new Set(userTVShows.flatMap(tvshow => tvshow.networks || [])));
 
-    document.addEventListener('bookSelected', handleBookSelected as EventListener);
-    return () => {
-      document.removeEventListener('bookSelected', handleBookSelected as EventListener);
-    };
-  }, []);
-
-  // Get unique authors from books
-  const uniqueAuthors = Array.from(new Set(userBooks.map(book => book.author)));
-
-  const handleEditClick = (book: Book) => {
-    setSelectedBookForEdit(book);
-    setSelectedGenres(book.genres || []);
+  const handleEditClick = (tvshow: TVShow) => {
+    setSelectedTVShowForEdit(tvshow);
+    setSelectedGenres(tvshow.genres || []);
     setEditDialogOpen(true);
   };
 
   const handleDeleteClick = () => {
-    if (selectedBookForEdit) {
-      handleDeleteBook(selectedBookForEdit.id);
+    if (selectedTVShowForEdit) {
+      handleDeleteTVShow(selectedTVShowForEdit.id);
       setEditDialogOpen(false);
     }
   };
 
-  const handleBookSelect = (book: BookSearchResult) => {
-    console.log('handleBookSelect called with book:', book);
-    setSelectedBook(book);
-    setBookDetails({
+  const handleTVShowSelect = (tvshow: TVShowSearchResult) => {
+    setSelectedTVShow(tvshow);
+    setTVShowDetails({
       status: 'planning',
-      timesRead: 0,
+      timesWatched: 0,
       rating: 0,
-      currentPage: 0
+      currentSeason: 1,
+      currentEpisode: 1
     });
     setDialogOpen(true);
   };
 
-  const handleAddBook = async () => {
-    if (!user || !selectedBook) return;
+  const handleAddTVShow = async () => {
+    if (!user || !selectedTVShow) return;
 
-    const pageCount = selectedBook.pageCount || 0;
-    console.log('Adding book:', selectedBook);
-    const newBook: Omit<Book, 'id' | 'createdAt' | 'updatedAt'> = {
-      title: selectedBook.title,
-      author: selectedBook.authors?.join(', ') || 'Unknown Author',
-      coverUrl: selectedBook.coverUrl || '',
-      description: selectedBook.description || '',
-      publishedDate: selectedBook.publishedDate || '',
-      pageCount: pageCount,
-      genres: selectedBook.genres || ['Fiction'],
-      status: bookDetails.status || 'planning',
-      currentPage: bookDetails.status === 'completed' ? pageCount : bookDetails.currentPage || 0,
-      timesRead: bookDetails.status === 'completed' ? 1 : bookDetails.timesRead || 0,
-      rating: bookDetails.rating || 0,
+    // Calculate episodes per season
+    const episodesPerSeason = Math.ceil((selectedTVShow.numberOfEpisodes || 1) / (selectedTVShow.numberOfSeasons || 1));
+
+    const newTVShow: Omit<TVShow, 'id' | 'createdAt' | 'updatedAt'> = {
+      title: selectedTVShow.title,
+      posterUrl: selectedTVShow.posterUrl || '',
+      backdropUrl: selectedTVShow.backdropUrl || '',
+      description: selectedTVShow.description || '',
+      firstAirDate: selectedTVShow.firstAirDate || '',
+      lastAirDate: selectedTVShow.lastAirDate || '',
+      numberOfSeasons: selectedTVShow.numberOfSeasons || 1,
+      numberOfEpisodes: selectedTVShow.numberOfEpisodes || 1,
+      genres: selectedTVShow.genres || ['Drama'],
+      createdBy: selectedTVShow.createdBy || [],
+      networks: selectedTVShow.networks || [],
+      status: tvshowDetails.status || 'planning',
+      // When status is completed, set current episode to the last episode of the last season
+      currentEpisode: tvshowDetails.status === 'completed' ? episodesPerSeason : tvshowDetails.currentEpisode || 1,
+      // When status is completed, set current season to the last season
+      currentSeason: tvshowDetails.status === 'completed' ? selectedTVShow.numberOfSeasons || 1 : tvshowDetails.currentSeason || 1,
+      timesWatched: tvshowDetails.timesWatched || 0,
+      rating: tvshowDetails.rating || 0,
       userId: user.uid
     };
 
     try {
-      console.log('Sending book to service:', newBook);
-      await bookService.addBook(newBook);
-      console.log('Book added successfully');
+      await tvshowService.addTVShow(newTVShow);
       setDialogOpen(false);
-      setSelectedBook(null);
-      setBookDetails({
+      setSelectedTVShow(null);
+      setTVShowDetails({
         status: 'planning',
-        timesRead: 0,
+        timesWatched: 0,
         rating: 0,
-        currentPage: 0
+        currentSeason: 1,
+        currentEpisode: 1
       });
-      queryClient.invalidateQueries(['books']);
+      queryClient.invalidateQueries(['tvshows']);
     } catch (error) {
-      console.error('Error adding book:', error);
+      console.error('Error adding TV show:', error);
     }
   };
 
-  const handleDeleteBook = async (bookId: string) => {
-    if (!user) return;
-
+  const handleDeleteTVShow = async (tvshowId: string) => {
     try {
-      await bookService.deleteBook(bookId);
+      await tvshowService.deleteTVShow(tvshowId);
+      queryClient.invalidateQueries(['tvshows']);
     } catch (error) {
-      console.error('Error deleting book:', error);
+      console.error('Error deleting TV show:', error);
     }
   };
 
   const handleEditSave = async () => {
-    if (!selectedBookForEdit) return;
+    if (!selectedTVShowForEdit) return;
 
-    const currentPage = selectedBookForEdit.status === 'completed' 
-      ? selectedBookForEdit.pageCount 
-      : selectedBookForEdit.currentPage;
-
-    const updates = {
-      title: selectedBookForEdit.title,
-      author: selectedBookForEdit.author,
-      pageCount: selectedBookForEdit.pageCount,
-      status: selectedBookForEdit.status,
-      rating: selectedBookForEdit.rating,
-      updatedAt: new Date().toISOString(),
-      currentPage,
-      timesRead: selectedBookForEdit.status === 'completed' ? 1 : selectedBookForEdit.timesRead,
-      genres: selectedGenres
+    const updatedTVShow: Partial<TVShow> = {
+      ...selectedTVShowForEdit,
+      genres: selectedGenres,
+      updatedAt: new Date()
     };
 
     try {
-      await bookService.updateBook(selectedBookForEdit.id, updates);
+      await tvshowService.updateTVShow(selectedTVShowForEdit.id, updatedTVShow);
       setEditDialogOpen(false);
-      setSelectedBookForEdit(null);
-      setSelectedGenres([]);
-      queryClient.invalidateQueries(['books']);
+      queryClient.invalidateQueries(['tvshows']);
     } catch (error) {
-      console.error('Error updating book:', error);
+      console.error('Error updating TV show:', error);
     }
   };
 
-  const handleStatusChange = (status: ReadingStatus) => {
-    if (!selectedBookForEdit) return;
-    
-    const updatedBook = {
-      ...selectedBookForEdit,
-      status,
-      currentPage: status === 'completed' ? (selectedBookForEdit.pageCount || 0) : selectedBookForEdit.currentPage,
-      timesRead: status === 'completed' ? 1 : selectedBookForEdit.timesRead
-    };
-    
-    console.log('Updating book status:', {
-      oldStatus: selectedBookForEdit.status,
-      newStatus: status,
-      oldPage: selectedBookForEdit.currentPage,
-      newPage: updatedBook.currentPage,
-      pageCount: selectedBookForEdit.pageCount
-    });
-    
-    setSelectedBookForEdit(updatedBook);
+  const handleStatusChange = (status: TVShowStatus) => {
+    if (selectedTVShowForEdit) {
+      // Calculate episodes per season
+      const episodesPerSeason = Math.ceil(selectedTVShowForEdit.numberOfEpisodes / selectedTVShowForEdit.numberOfSeasons);
+      
+      setSelectedTVShowForEdit({
+        ...selectedTVShowForEdit,
+        status,
+        // When status is changed to completed, set current episode to the last episode of the last season
+        currentEpisode: status === 'completed' ? episodesPerSeason : selectedTVShowForEdit.currentEpisode,
+        // When status is changed to completed, set current season to the last season
+        currentSeason: status === 'completed' ? selectedTVShowForEdit.numberOfSeasons : selectedTVShowForEdit.currentSeason
+      });
+    }
   };
 
-  const handleFilterStatusChange = (status: ReadingStatus) => {
+  const handleFilterStatusChange = (status: TVShowStatus) => {
     setSelectedStatuses(prev =>
       prev.includes(status)
         ? prev.filter(s => s !== status)
@@ -325,11 +243,19 @@ const Tracker: React.FC = () => {
     );
   };
 
-  const handleAuthorChange = (author: string) => {
-    setSelectedAuthors(prev =>
-      prev.includes(author)
-        ? prev.filter(a => a !== author)
-        : [...prev, author]
+  const handleCreatorChange = (creator: string) => {
+    setSelectedCreators(prev =>
+      prev.includes(creator)
+        ? prev.filter(c => c !== creator)
+        : [...prev, creator]
+    );
+  };
+
+  const handleNetworkChange = (network: string) => {
+    setSelectedNetworks(prev =>
+      prev.includes(network)
+        ? prev.filter(n => n !== network)
+        : [...prev, network]
     );
   };
 
@@ -338,7 +264,7 @@ const Tracker: React.FC = () => {
   };
 
   const handleSortChange = (event: SelectChangeEvent) => {
-    setSortBy(event.target.value);
+    setSortBy(event.target.value as 'title' | 'firstAirDate' | 'rating');
   };
 
   const toggleSortOrder = () => {
@@ -346,36 +272,51 @@ const Tracker: React.FC = () => {
   };
 
   const handleGenreChange = (event: SelectChangeEvent<string[]>) => {
-    setSelectedGenres(event.target.value as string[]);
+    const value = event.target.value;
+    setSelectedGenres(typeof value === 'string' ? value.split(',') : value);
   };
 
-  const filteredBooks = userBooks
-    .filter(book => selectedStatuses.includes(book.status))
-    .filter(book => selectedAuthors.length === 0 || selectedAuthors.includes(book.author))
-    .filter(book => {
-      const year = new Date(book.publishedDate || '').getFullYear();
+  const getTVShowsByStatus = (status: TVShowStatus) => {
+    return filteredTVShows.filter(tvshow => tvshow.status === status);
+  };
+
+  const getStatusColor = (status: TVShowStatus) => {
+    const colors = {
+      watching: '#4caf50',
+      paused: '#ff9800',
+      planning: '#2196f3',
+      completed: '#9c27b0',
+      're-watching': '#e91e63'
+    };
+    return colors[status];
+  };
+
+  const filteredTVShows = userTVShows
+    .filter(tvshow => selectedStatuses.includes(tvshow.status))
+    .filter(tvshow => selectedCreators.length === 0 || (tvshow.createdBy && tvshow.createdBy.some(creator => selectedCreators.includes(creator))))
+    .filter(tvshow => selectedNetworks.length === 0 || (tvshow.networks && tvshow.networks.some(network => selectedNetworks.includes(network))))
+    .filter(tvshow => {
+      const year = new Date(tvshow.firstAirDate || '').getFullYear();
       return year >= yearRange[0] && year <= yearRange[1];
     })
-    .filter(book => {
+    .filter(tvshow => {
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase().trim();
       return (
-        book.title.toLowerCase().includes(query) ||
-        book.author.toLowerCase().includes(query) ||
-        (book.genres && book.genres.some(genre => genre.toLowerCase().includes(query)))
+        tvshow.title.toLowerCase().includes(query) ||
+        (tvshow.createdBy && tvshow.createdBy.some(creator => creator.toLowerCase().includes(query))) ||
+        (tvshow.genres && tvshow.genres.some(genre => genre.toLowerCase().includes(query)))
       );
     })
+    .filter(tvshow => selectedGenres.length === 0 || (tvshow.genres && tvshow.genres.some(genre => selectedGenres.includes(genre))))
     .sort((a, b) => {
       let comparison = 0;
       switch (sortBy) {
         case 'title':
           comparison = a.title.localeCompare(b.title);
           break;
-        case 'author':
-          comparison = a.author.localeCompare(b.author);
-          break;
-        case 'year':
-          comparison = (new Date(a.publishedDate || '').getFullYear() - new Date(b.publishedDate || '').getFullYear());
+        case 'firstAirDate':
+          comparison = new Date(a.firstAirDate || '').getTime() - new Date(b.firstAirDate || '').getTime();
           break;
         case 'rating':
           comparison = (a.rating || 0) - (b.rating || 0);
@@ -386,56 +327,25 @@ const Tracker: React.FC = () => {
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
-  const getBooksByStatus = (status: ReadingStatus) => {
-    return filteredBooks.filter(book => book.status === status);
-  };
-
-  const getStatusColor = (status: ReadingStatus) => {
-    const colors: Record<ReadingStatus, string> = {
-      reading: '#4caf50',
-      paused: '#ff9800',
-      planning: '#2196f3',
-      completed: '#9c27b0',
-      're-reading': '#e91e63'
-    };
-    return colors[status];
-  };
-
-  if (booksLoading) {
+  if (tvshowsLoading) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: 'calc(100vh - 64px)',
-        bgcolor: '#1a1a1a'
-      }}>
-        <CircularProgress sx={{ color: '#0bceaf' }} />
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
       </Box>
     );
   }
 
-  if (booksError) {
+  if (tvshowsError) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: 'calc(100vh - 64px)',
-        bgcolor: '#1a1a1a',
-        color: 'white',
-        p: 3
-      }}>
-        <Typography variant="h6" color="error">
-          Error loading books: {booksError}
-        </Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <Typography color="error">Error loading TV shows</Typography>
       </Box>
     );
   }
 
   return (
     <Box 
-      data-component="tracker"
+      data-component="tvshow-tracker"
       sx={{ 
         p: 3,
         height: 'calc(100vh - 64px)',
@@ -500,11 +410,11 @@ const Tracker: React.FC = () => {
                   <FilterListIcon /> Filters
                 </Typography>
 
-                {/* Add Book Button */}
+                {/* Add TV Show Button */}
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
-                  onClick={openSearchModal}
+                  onClick={() => setSearchModalOpen(true)}
                   fullWidth
                   sx={{
                     mb: 3,
@@ -514,7 +424,7 @@ const Tracker: React.FC = () => {
                     },
                   }}
                 >
-                  Add Book
+                  Add TV Show
                 </Button>
 
                 {/* Status Filter */}
@@ -633,8 +543,7 @@ const Tracker: React.FC = () => {
                       }}
                     >
                       <MenuItem value="title">Title</MenuItem>
-                      <MenuItem value="author">Author</MenuItem>
-                      <MenuItem value="year">Year</MenuItem>
+                      <MenuItem value="firstAirDate">Air Date</MenuItem>
                       <MenuItem value="rating">Rating</MenuItem>
                     </Select>
                   </FormControl>
@@ -648,7 +557,7 @@ const Tracker: React.FC = () => {
               <Box sx={{ mb: 3 }}>
                 <TextField
                   fullWidth
-                  placeholder="Search books..."
+                  placeholder="Search TV shows..."
                   value={searchQuery}
                   onClick={() => setSearchModalOpen(true)}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -706,13 +615,13 @@ const Tracker: React.FC = () => {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell width="80px" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Cover</TableCell>
+                      <TableCell width="80px" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Poster</TableCell>
                       <TableCell width="20%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Title</TableCell>
-                      <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Author</TableCell>
+                      <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Created By</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Genres</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Progress</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Rating</TableCell>
-                      <TableCell width="10%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Times Read</TableCell>
+                      <TableCell width="10%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Times Watched</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -734,13 +643,13 @@ const Tracker: React.FC = () => {
                                   gap: 1
                                 }}
                               >
-                                {status.charAt(0).toUpperCase() + status.slice(1)} ({getBooksByStatus(status).length})
+                                {status.charAt(0).toUpperCase() + status.slice(1)} ({getTVShowsByStatus(status).length})
                               </Typography>
                             </TableCell>
                           </TableRow>
-                          {getBooksByStatus(status).map((book) => (
+                          {getTVShowsByStatus(status).map((tvshow) => (
                             <TableRow
-                              key={book.id}
+                              key={tvshow.id}
                               sx={{
                                 '&:hover': {
                                   bgcolor: 'rgba(255,255,255,0.05)',
@@ -751,14 +660,14 @@ const Tracker: React.FC = () => {
                                 <Box sx={{ position: 'relative', width: 60, height: 90 }}>
                                   <Avatar
                                     variant="rounded"
-                                    src={book.coverUrl}
-                                    alt={book.title}
+                                    src={tvshow.posterUrl}
+                                    alt={tvshow.title}
                                     sx={{ width: '100%', height: '100%' }}
                                   />
                                   <IconButton
                                     size="small"
                                     className="action-menu"
-                                    onClick={() => handleEditClick(book)}
+                                    onClick={() => handleEditClick(tvshow)}
                                     sx={{
                                       position: 'absolute',
                                       top: '50%',
@@ -790,7 +699,7 @@ const Tracker: React.FC = () => {
                                     fontWeight: 'bold'
                                   }}
                                 >
-                                  {book.title}
+                                  {tvshow.title}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
@@ -800,7 +709,7 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.author || 'Unknown'}
+                                  {tvshow.createdBy?.join(', ') || 'Unknown'}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
@@ -810,11 +719,11 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.genres?.join(', ') || 'Fiction'}
+                                  {tvshow.genres?.join(', ') || 'No genres'}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
-                                {book.status === 'reading' || book.status === 're-reading' || book.status === 'completed' ? (
+                                {tvshow.status === 'watching' || tvshow.status === 're-watching' || tvshow.status === 'completed' ? (
                                   <Typography 
                                     variant="body2" 
                                     sx={{ 
@@ -822,7 +731,7 @@ const Tracker: React.FC = () => {
                                       whiteSpace: 'nowrap',
                                     }}
                                   >
-                                    {book.currentPage} / {book.pageCount} pages
+                                    Season {tvshow.currentSeason} Episode {tvshow.currentEpisode}
                                   </Typography>
                                 ) : (
                                   <Typography 
@@ -836,7 +745,7 @@ const Tracker: React.FC = () => {
                                 )}
                               </TableCell>
                               <TableCell width="15%">
-                                <Rating value={book.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
+                                <Rating value={tvshow.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
                               </TableCell>
                               <TableCell width="10%">
                                 <Typography 
@@ -845,7 +754,7 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.timesRead || 0} times
+                                  {tvshow.timesWatched || 0} times
                                 </Typography>
                               </TableCell>
                             </TableRow>
@@ -861,7 +770,7 @@ const Tracker: React.FC = () => {
         </Container>
       </Box>
 
-      {/* Add/Edit Book Dialog */}
+      {/* Add/Edit TV Show Dialog */}
       <Dialog 
         open={dialogOpen} 
         onClose={() => setDialogOpen(false)} 
@@ -869,20 +778,20 @@ const Tracker: React.FC = () => {
         fullWidth
         sx={{ zIndex: 1300 }}
       >
-        <DialogTitle>Add Book</DialogTitle>
+        <DialogTitle>Add TV Show</DialogTitle>
         <DialogContent>
-          {selectedBook && (
+          {selectedTVShow && (
             <Box mt={2}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
                     <Select
-                      value={bookDetails.status}
+                      value={tvshowDetails.status}
                       label="Status"
-                      onChange={(e) => setBookDetails({
-                        ...bookDetails,
-                        status: e.target.value as ReadingStatus
+                      onChange={(e) => setTVShowDetails({
+                        ...tvshowDetails,
+                        status: e.target.value as TVShowStatus
                       })}
                     >
                       {STATUS_ORDER.map(status => (
@@ -893,34 +802,58 @@ const Tracker: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={6}>
                   <TextField
                     fullWidth
-                    label="Current Page"
+                    label="Current Season"
                     type="number"
-                    value={bookDetails.currentPage}
+                    value={tvshowDetails.currentSeason}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
-                      if (value >= 0 && value <= (selectedBook.pageCount || 0)) {
-                        setBookDetails({
-                          ...bookDetails,
-                          currentPage: value
+                      if (value >= 1 && value <= (selectedTVShow.numberOfSeasons || 1)) {
+                        setTVShowDetails({
+                          ...tvshowDetails,
+                          currentSeason: value,
+                          // Reset episode to 1 when changing seasons
+                          currentEpisode: 1
                         });
                       }
                     }}
                     inputProps={{
-                      min: 0,
-                      max: selectedBook.pageCount || 0
+                      min: 1,
+                      max: selectedTVShow.numberOfSeasons || 1
                     }}
-                    helperText={`Total pages: ${selectedBook.pageCount || 'Unknown'}`}
+                    helperText={`Total Seasons: ${selectedTVShow.numberOfSeasons || 1}`}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    fullWidth
+                    label="Current Episode"
+                    type="number"
+                    value={tvshowDetails.currentEpisode}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 1 && value <= (selectedTVShow.numberOfEpisodes || 1)) {
+                        setTVShowDetails({
+                          ...tvshowDetails,
+                          currentEpisode: value
+                        });
+                      }
+                    }}
+                    inputProps={{
+                      min: 1,
+                      max: selectedTVShow.numberOfEpisodes || 1
+                    }}
+                    helperText={`Episodes per Season: ${selectedTVShow.numberOfEpisodes || 1}`}
                   />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography component="legend">Rating</Typography>
                   <Rating
-                    value={bookDetails.rating}
-                    onChange={(_, value) => setBookDetails({
-                      ...bookDetails,
+                    value={tvshowDetails.rating}
+                    onChange={(_, value) => setTVShowDetails({
+                      ...tvshowDetails,
                       rating: value || 0
                     })}
                   />
@@ -931,13 +864,13 @@ const Tracker: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddBook} variant="contained" color="primary">
-            Add Book
+          <Button onClick={handleAddTVShow} variant="contained" color="primary">
+            Add TV Show
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Edit Book Dialog */}
+      {/* Edit TV Show Dialog */}
       <Dialog 
         open={editDialogOpen} 
         onClose={() => setEditDialogOpen(false)} 
@@ -945,18 +878,18 @@ const Tracker: React.FC = () => {
         fullWidth
         sx={{ zIndex: 1300 }}
       >
-        <DialogTitle>Edit Book</DialogTitle>
+        <DialogTitle>Edit TV Show</DialogTitle>
         <DialogContent>
-          {selectedBookForEdit && (
+          {selectedTVShowForEdit && (
             <Box mt={2}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
                     <Select
-                      value={selectedBookForEdit.status}
+                      value={selectedTVShowForEdit.status}
                       label="Status"
-                      onChange={(e) => handleStatusChange(e.target.value as ReadingStatus)}
+                      onChange={(e) => handleStatusChange(e.target.value as TVShowStatus)}
                     >
                       {STATUS_ORDER.map(status => (
                         <MenuItem key={status} value={status}>
@@ -966,34 +899,58 @@ const Tracker: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={6}>
                   <TextField
                     fullWidth
-                    label="Current Page"
+                    label="Current Season"
                     type="number"
-                    value={selectedBookForEdit.currentPage}
+                    value={selectedTVShowForEdit.currentSeason}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
-                      if (value >= 0 && value <= (selectedBookForEdit.pageCount || 0)) {
-                        setSelectedBookForEdit({
-                          ...selectedBookForEdit,
-                          currentPage: value
+                      if (value >= 1 && value <= (selectedTVShowForEdit.numberOfSeasons || 1)) {
+                        setSelectedTVShowForEdit({
+                          ...selectedTVShowForEdit,
+                          currentSeason: value,
+                          // Reset episode to 1 when changing seasons
+                          currentEpisode: 1
                         });
                       }
                     }}
                     inputProps={{
-                      min: 0,
-                      max: selectedBookForEdit.pageCount || 0
+                      min: 1,
+                      max: selectedTVShowForEdit.numberOfSeasons || 1
                     }}
-                    helperText={`Total pages: ${selectedBookForEdit.pageCount || 'Unknown'}`}
+                    helperText={`Total Seasons: ${selectedTVShowForEdit.numberOfSeasons || 1}`}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    fullWidth
+                    label="Current Episode"
+                    type="number"
+                    value={selectedTVShowForEdit.currentEpisode}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 1 && value <= (selectedTVShowForEdit.numberOfEpisodes || 1)) {
+                        setSelectedTVShowForEdit({
+                          ...selectedTVShowForEdit,
+                          currentEpisode: value
+                        });
+                      }
+                    }}
+                    inputProps={{
+                      min: 1,
+                      max: selectedTVShowForEdit.numberOfEpisodes || 1
+                    }}
+                    helperText={`Episodes per Season: ${selectedTVShowForEdit.numberOfEpisodes || 1}`}
                   />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography component="legend">Rating</Typography>
                   <Rating
-                    value={selectedBookForEdit.rating}
-                    onChange={(_, value) => setSelectedBookForEdit({
-                      ...selectedBookForEdit,
+                    value={selectedTVShowForEdit.rating}
+                    onChange={(_, value) => setSelectedTVShowForEdit({
+                      ...selectedTVShowForEdit,
                       rating: value || 0
                     })}
                   />
@@ -1032,13 +989,13 @@ const Tracker: React.FC = () => {
       </Dialog>
 
       {/* Search Modal */}
-      <SearchModal
+      <TVShowSearchModal
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
-        onBookSelect={handleBookSelect}
+        onTVShowSelect={handleTVShowSelect}
       />
     </Box>
   );
 };
 
-export default Tracker;
+export default TVShowTracker; 

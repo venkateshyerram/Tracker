@@ -1,46 +1,90 @@
-# Getting Started with Create React App
+# Tracker Application
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A modern web application built with React and TypeScript for tracking and visualizing data. This application features a beautiful Material-UI interface, interactive charts, and GitHub-style activity calendar.
 
-## Available Scripts
+## 🚀 Features
 
-In the project directory, you can run:
+- Modern React with TypeScript support
+- Material-UI components for a polished user interface
+- Interactive data visualization with Chart.js
+- GitHub-style activity calendar
+- Firebase integration for backend services
+- Google reCAPTCHA integration for security
+- Responsive design for all devices
+- React Query for efficient data fetching
+- React Router for seamless navigation
 
-### `npm start`
+## 🛠️ Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+- **Frontend Framework:** React 18
+- **Language:** TypeScript
+- **UI Library:** Material-UI (MUI)
+- **State Management:** React Query
+- **Charts:** Chart.js with react-chartjs-2
+- **Activity Calendar:** react-activity-calendar
+- **Authentication:** Firebase
+- **Security:** Google reCAPTCHA
+- **Build Tool:** CRACO (Create React App Configuration Override)
+- **Deployment:** GitHub Pages
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## 📦 Installation
 
-### `npm test`
+1. Clone the repository:
+```bash
+git clone https://github.com/venkateshyerram/Tracker.git
+cd Tracker
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+2. Install dependencies:
+```bash
+npm install
+```
 
-### `npm run build`
+3. Start the development server:
+```bash
+npm start
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+The application will be available at [http://localhost:3000](http://localhost:3000).
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🏗️ Project Structure
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```
+src/
+├── components/     # Reusable UI components
+├── config/        # Configuration files
+├── contexts/      # React context providers
+├── hooks/         # Custom React hooks
+├── services/      # API and service integrations
+├── theme/         # MUI theme configuration
+├── types/         # TypeScript type definitions
+└── utils/         # Utility functions
+```
 
-### `npm run eject`
+## 🚀 Available Scripts
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+- `npm start` - Runs the app in development mode
+- `npm test` - Launches the test runner
+- `npm run build` - Builds the app for production
+- `npm run deploy` - Deploys the app to GitHub Pages
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## 🔧 Configuration
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+The application uses CRACO for customizing the Create React App configuration. The main configuration file is `craco.config.js`.
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## 🌐 Deployment
 
-## Learn More
+The application is automatically deployed to GitHub Pages when changes are pushed to the main branch. The deployment is configured in the `package.json` file.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 📝 License
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+This project is private and proprietary.
+
+## 👥 Contributing
+
+This is a private project. Please contact the repository owner for contribution guidelines.
+
+## 🔗 Links
+
+- [Live Demo](https://venkateshyerram.github.io/Tracker)
+- [GitHub Repository](https://github.com/venkateshyerram/Tracker)

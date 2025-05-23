@@ -7,12 +7,16 @@ import { theme } from './theme/theme';
 import Navbar from './components/common/Navbar';
 import Home from './components/Home/Home';
 import Tracker from './components/Tracker/Tracker';
+import MovieTracker from './components/Tracker/MovieTracker';
+import TVShowTracker from './components/Tracker/TVShowTracker';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SearchProvider, useSearch } from './contexts/SearchContext';
 import { CircularProgress, Box, Typography } from '@mui/material';
 import SearchModal from './components/shared/SearchModal';
+import MovieSearchModal from './components/shared/MovieSearchModal';
+import { MovieSearchResult } from './services/movieSearchService';
 
 // Create a client
 const queryClient = new QueryClient();
@@ -52,8 +56,9 @@ class ErrorBoundary extends React.Component<
 
 const AppContent = () => {
   const { user, loading, error } = useAuth();
-  const { openSearchModal, isSearchModalOpen, closeSearchModal } = useSearch();
+  const { isSearchModalOpen, openSearchModal, closeSearchModal } = useSearch();
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [searchType, setSearchType] = useState<'book' | 'movie'>('book');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -64,6 +69,16 @@ const AppContent = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    // Set search type based on current route
+    const path = window.location.pathname;
+    if (path === '/movie-tracker') {
+      setSearchType('movie');
+    } else {
+      setSearchType('book');
+    }
+  }, [window.location.pathname]);
 
   if (loading) {
     return (
@@ -114,23 +129,42 @@ const AppContent = () => {
         <Route path="/register" element={!user ? <Register /> : <Navigate to="/login" />} />
         <Route path="/" element={user ? <Home /> : <Navigate to="/login" />} />
         <Route path="/tracker" element={user ? <Tracker /> : <Navigate to="/login" />} />
+        <Route path="/movie-tracker" element={user ? <MovieTracker /> : <Navigate to="/login" />} />
+        <Route path="/tvshow-tracker" element={user ? <TVShowTracker /> : <Navigate to="/login" />} />
       </Routes>
-      <SearchModal
-        open={isSearchModalOpen}
-        onClose={closeSearchModal}
-        onBookSelect={(book) => {
-          const currentPath = window.location.pathname;
-          console.log('Book selected in path:', currentPath);
-          
-          const event = new CustomEvent('bookSelected', { 
-            detail: book,
-            bubbles: true,
-            composed: true
-          });
-          document.dispatchEvent(event);
-          console.log('Book selection event dispatched');
-        }}
-      />
+      {searchType === 'book' ? (
+        <SearchModal
+          open={isSearchModalOpen && searchType === 'book'}
+          onClose={closeSearchModal}
+          onBookSelect={(book) => {
+            const currentPath = window.location.pathname;
+            console.log('Book selected in path:', currentPath);
+            
+            const event = new CustomEvent('bookSelected', { 
+              detail: book,
+              bubbles: true,
+              composed: true
+            });
+            document.dispatchEvent(event);
+            console.log('Book selection event dispatched');
+          }}
+        />
+      ) : (
+        <MovieSearchModal
+          open={isSearchModalOpen && searchType === 'movie'}
+          onClose={closeSearchModal}
+          onMovieSelect={(movie: MovieSearchResult) => {
+            const currentPath = window.location.pathname;
+            console.log('Movie selected in path:', currentPath);
+            
+            if (currentPath === '/movie-tracker') {
+              // Handle movie selection in MovieTracker
+              const event = new CustomEvent('movieSelected', { detail: movie });
+              document.dispatchEvent(event);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

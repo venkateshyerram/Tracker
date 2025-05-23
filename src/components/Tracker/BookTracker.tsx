@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
+  Box,
   Container,
   Grid,
+  Typography,
   TextField,
   Button,
   Card,
   CardContent,
-  CardMedia,
-  Typography,
-  Box,
+  Avatar,
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,16 +19,10 @@ import {
   Select,
   MenuItem,
   Rating,
-  Tabs,
-  Tab,
-  IconButton,
-  Tooltip,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
-  Divider,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Slider,
   Table,
   TableBody,
   TableCell,
@@ -35,360 +30,58 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Collapse,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Modal,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
-  Slider,
-  SelectChangeEvent
+  SelectChangeEvent,
+  CircularProgress,
 } from '@mui/material';
-import { useQuery, useQueryClient } from 'react-query';
-import axios from 'axios';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  FilterList as FilterListIcon,
+  Sort as SortIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import { useQuery } from 'react-query';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { bookService } from '../../services/bookService';
-import { Book, ReadingStatus, BookSearchResult } from '../../types/book';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import CloseIcon from '@mui/icons-material/Close';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import { CircularProgress } from '@mui/material';
-import { useBooks } from '../../hooks/useBooks';
-import { useSearch } from '../../contexts/SearchContext';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import SortIcon from '@mui/icons-material/Sort';
 import SearchModal from '../shared/SearchModal';
-import { bookSearchService } from '../../services/bookSearchService';
-import SearchIcon from '@mui/icons-material/Search';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`book-tabpanel-${index}`}
-      aria-labelledby={`book-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
+import { Book, ReadingStatus, BookSearchResult } from '../../types/book';
 
 const STATUS_ORDER: ReadingStatus[] = ['reading', 'paused', 'planning', 'completed', 're-reading'];
 
-const Tracker: React.FC = () => {
-  const { user } = useAuth();
-  const { books: userBooks, loading: booksLoading, error: booksError } = useBooks();
-  const { openSearchModal, closeSearchModal } = useSearch();
+const BookTracker: React.FC = () => {
+  const { currentUser } = useAuth();
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
-  const [bookDetails, setBookDetails] = useState<Partial<Book>>({
-    status: 'planning',
-    timesRead: 0,
-    rating: 0,
-    currentPage: 0
-  });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
   const [selectedBookForEdit, setSelectedBookForEdit] = useState<Book | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<ReadingStatus[]>(['reading', 'paused', 'planning', 'completed', 're-reading']);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
-  const [yearRange, setYearRange] = useState<[number, number]>([1900, new Date().getFullYear()]);
+  const [bookDetails, setBookDetails] = useState({
+    status: 'planning' as ReadingStatus,
+    currentPage: 0,
+    rating: 0,
+    timesRead: 0
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<ReadingStatus[]>(['reading', 'planning', 'completed']);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [yearRange, setYearRange] = useState<number[]>([1900, new Date().getFullYear()]);
   const [sortBy, setSortBy] = useState('title');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const queryClient = useQueryClient();
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
-  // Predefined genres
-  const predefinedGenres = [
-    'Fiction',
-    'Non-Fiction',
-    'Mystery',
-    'Science Fiction',
-    'Fantasy',
-    'Romance',
-    'Thriller',
-    'Horror',
-    'Biography',
-    'History',
-    'Science',
-    'Technology',
-    'Philosophy',
-    'Psychology',
-    'Self-Help',
-    'Business',
-    'Poetry',
-    'Drama',
-    'Comedy',
-    'Adventure',
-    'Crime',
-    'Young Adult',
-    'Children',
-    'Classic',
-    'Contemporary',
-    'Literary Fiction',
-    'Historical Fiction',
-    'Dystopian',
-    'Memoir',
-    'Cookbook',
-    'Art',
-    'Music',
-    'Sports',
-    'Travel',
-    'Religion',
-    'Spirituality',
-    'Education',
-    'Reference',
-    'Other'
-  ];
-
-  // Get all unique genres from books
-  const getAllGenres = () => {
-    const bookGenres = new Set<string>();
-    userBooks.forEach(book => {
-      if (book.genres) {
-        book.genres.forEach(genre => bookGenres.add(genre));
-      }
-    });
-    return Array.from(bookGenres);
-  };
-
-  // Combine predefined and custom genres
-  const allGenres = useMemo(() => {
-    const customGenres = getAllGenres();
-    const combinedGenres = new Set([...predefinedGenres, ...customGenres]);
-    return Array.from(combinedGenres).sort();
-  }, [userBooks]);
-
-  useEffect(() => {
-    const handleBookSelected = (event: CustomEvent<BookSearchResult>) => {
-      console.log('Book selected event received:', event.detail);
-      if (window.location.pathname === '/tracker') {
-        handleBookSelect(event.detail);
-      }
-    };
-
-    document.addEventListener('bookSelected', handleBookSelected as EventListener);
-    return () => {
-      document.removeEventListener('bookSelected', handleBookSelected as EventListener);
-    };
-  }, []);
-
-  // Get unique authors from books
-  const uniqueAuthors = Array.from(new Set(userBooks.map(book => book.author)));
-
-  const handleEditClick = (book: Book) => {
-    setSelectedBookForEdit(book);
-    setSelectedGenres(book.genres || []);
-    setEditDialogOpen(true);
-  };
-
-  const handleDeleteClick = () => {
-    if (selectedBookForEdit) {
-      handleDeleteBook(selectedBookForEdit.id);
-      setEditDialogOpen(false);
+  const { data: books = [], isLoading, error } = useQuery<Book[]>(
+    ['books', currentUser?.uid],
+    async () => {
+      if (!currentUser) return [];
+      const querySnapshot = await getDocs(collection(db, 'users', currentUser.uid, 'books'));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Book));
+    },
+    {
+      enabled: !!currentUser,
     }
-  };
+  );
 
-  const handleBookSelect = (book: BookSearchResult) => {
-    console.log('handleBookSelect called with book:', book);
-    setSelectedBook(book);
-    setBookDetails({
-      status: 'planning',
-      timesRead: 0,
-      rating: 0,
-      currentPage: 0
-    });
-    setDialogOpen(true);
-  };
-
-  const handleAddBook = async () => {
-    if (!user || !selectedBook) return;
-
-    const pageCount = selectedBook.pageCount || 0;
-    console.log('Adding book:', selectedBook);
-    const newBook: Omit<Book, 'id' | 'createdAt' | 'updatedAt'> = {
-      title: selectedBook.title,
-      author: selectedBook.authors?.join(', ') || 'Unknown Author',
-      coverUrl: selectedBook.coverUrl || '',
-      description: selectedBook.description || '',
-      publishedDate: selectedBook.publishedDate || '',
-      pageCount: pageCount,
-      genres: selectedBook.genres || ['Fiction'],
-      status: bookDetails.status || 'planning',
-      currentPage: bookDetails.status === 'completed' ? pageCount : bookDetails.currentPage || 0,
-      timesRead: bookDetails.status === 'completed' ? 1 : bookDetails.timesRead || 0,
-      rating: bookDetails.rating || 0,
-      userId: user.uid
-    };
-
-    try {
-      console.log('Sending book to service:', newBook);
-      await bookService.addBook(newBook);
-      console.log('Book added successfully');
-      setDialogOpen(false);
-      setSelectedBook(null);
-      setBookDetails({
-        status: 'planning',
-        timesRead: 0,
-        rating: 0,
-        currentPage: 0
-      });
-      queryClient.invalidateQueries(['books']);
-    } catch (error) {
-      console.error('Error adding book:', error);
-    }
-  };
-
-  const handleDeleteBook = async (bookId: string) => {
-    if (!user) return;
-
-    try {
-      await bookService.deleteBook(bookId);
-    } catch (error) {
-      console.error('Error deleting book:', error);
-    }
-  };
-
-  const handleEditSave = async () => {
-    if (!selectedBookForEdit) return;
-
-    const currentPage = selectedBookForEdit.status === 'completed' 
-      ? selectedBookForEdit.pageCount 
-      : selectedBookForEdit.currentPage;
-
-    const updates = {
-      title: selectedBookForEdit.title,
-      author: selectedBookForEdit.author,
-      pageCount: selectedBookForEdit.pageCount,
-      status: selectedBookForEdit.status,
-      rating: selectedBookForEdit.rating,
-      updatedAt: new Date().toISOString(),
-      currentPage,
-      timesRead: selectedBookForEdit.status === 'completed' ? 1 : selectedBookForEdit.timesRead,
-      genres: selectedGenres
-    };
-
-    try {
-      await bookService.updateBook(selectedBookForEdit.id, updates);
-      setEditDialogOpen(false);
-      setSelectedBookForEdit(null);
-      setSelectedGenres([]);
-      queryClient.invalidateQueries(['books']);
-    } catch (error) {
-      console.error('Error updating book:', error);
-    }
-  };
-
-  const handleStatusChange = (status: ReadingStatus) => {
-    if (!selectedBookForEdit) return;
-    
-    const updatedBook = {
-      ...selectedBookForEdit,
-      status,
-      currentPage: status === 'completed' ? (selectedBookForEdit.pageCount || 0) : selectedBookForEdit.currentPage,
-      timesRead: status === 'completed' ? 1 : selectedBookForEdit.timesRead
-    };
-    
-    console.log('Updating book status:', {
-      oldStatus: selectedBookForEdit.status,
-      newStatus: status,
-      oldPage: selectedBookForEdit.currentPage,
-      newPage: updatedBook.currentPage,
-      pageCount: selectedBookForEdit.pageCount
-    });
-    
-    setSelectedBookForEdit(updatedBook);
-  };
-
-  const handleFilterStatusChange = (status: ReadingStatus) => {
-    setSelectedStatuses(prev =>
-      prev.includes(status)
-        ? prev.filter(s => s !== status)
-        : [...prev, status]
-    );
-  };
-
-  const handleAuthorChange = (author: string) => {
-    setSelectedAuthors(prev =>
-      prev.includes(author)
-        ? prev.filter(a => a !== author)
-        : [...prev, author]
-    );
-  };
-
-  const handleYearRangeChange = (_event: Event, newValue: number | number[]) => {
-    setYearRange(newValue as [number, number]);
-  };
-
-  const handleSortChange = (event: SelectChangeEvent) => {
-    setSortBy(event.target.value);
-  };
-
-  const toggleSortOrder = () => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-  };
-
-  const handleGenreChange = (event: SelectChangeEvent<string[]>) => {
-    setSelectedGenres(event.target.value as string[]);
-  };
-
-  const filteredBooks = userBooks
-    .filter(book => selectedStatuses.includes(book.status))
-    .filter(book => selectedAuthors.length === 0 || selectedAuthors.includes(book.author))
-    .filter(book => {
-      const year = new Date(book.publishedDate || '').getFullYear();
-      return year >= yearRange[0] && year <= yearRange[1];
-    })
-    .filter(book => {
-      if (!searchQuery.trim()) return true;
-      const query = searchQuery.toLowerCase().trim();
-      return (
-        book.title.toLowerCase().includes(query) ||
-        book.author.toLowerCase().includes(query) ||
-        (book.genres && book.genres.some(genre => genre.toLowerCase().includes(query)))
-      );
-    })
-    .sort((a, b) => {
-      let comparison = 0;
-      switch (sortBy) {
-        case 'title':
-          comparison = a.title.localeCompare(b.title);
-          break;
-        case 'author':
-          comparison = a.author.localeCompare(b.author);
-          break;
-        case 'year':
-          comparison = (new Date(a.publishedDate || '').getFullYear() - new Date(b.publishedDate || '').getFullYear());
-          break;
-        case 'rating':
-          comparison = (a.rating || 0) - (b.rating || 0);
-          break;
-        default:
-          comparison = 0;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-  const getBooksByStatus = (status: ReadingStatus) => {
-    return filteredBooks.filter(book => book.status === status);
-  };
+  const allGenres = Array.from(new Set(books.flatMap(book => book.genres || [])));
 
   const getStatusColor = (status: ReadingStatus) => {
     const colors: Record<ReadingStatus, string> = {
@@ -401,7 +94,148 @@ const Tracker: React.FC = () => {
     return colors[status];
   };
 
-  if (booksLoading) {
+  const handleFilterStatusChange = (status: ReadingStatus) => {
+    setSelectedStatuses(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const handleGenreChange = (event: SelectChangeEvent<string[]>) => {
+    setSelectedGenres(event.target.value as string[]);
+  };
+
+  const handleYearRangeChange = (event: Event, newValue: number | number[]) => {
+    setYearRange(newValue as number[]);
+  };
+
+  const handleSortChange = (event: SelectChangeEvent<string>) => {
+    setSortBy(event.target.value);
+  };
+
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  };
+
+  const getBooksByStatus = (status: ReadingStatus) => {
+    return books
+      .filter(book => book.status === status)
+      .filter(book => {
+        const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          book.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          book.genres?.some(genre => genre.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesGenres = selectedGenres.length === 0 || 
+          book.genres?.some(genre => selectedGenres.includes(genre));
+        const matchesYear = book.publishedDate ? 
+          new Date(book.publishedDate).getFullYear() >= yearRange[0] && 
+          new Date(book.publishedDate).getFullYear() <= yearRange[1] : true;
+        return matchesSearch && matchesGenres && matchesYear;
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+          case 'title':
+            comparison = a.title.localeCompare(b.title);
+            break;
+          case 'author':
+            comparison = (a.author || '').localeCompare(b.author || '');
+            break;
+          case 'year':
+            comparison = (new Date(a.publishedDate || '').getTime()) - (new Date(b.publishedDate || '').getTime());
+            break;
+          case 'rating':
+            comparison = (a.rating || 0) - (b.rating || 0);
+            break;
+          default:
+            comparison = 0;
+        }
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+  };
+
+  const handleAddBook = async () => {
+    if (!currentUser || !selectedBook) return;
+
+    try {
+      const bookData = {
+        ...selectedBook,
+        ...bookDetails,
+        userId: currentUser.uid,
+        addedAt: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, 'users', currentUser.uid, 'books'), bookData);
+      setDialogOpen(false);
+      setSelectedBook(null);
+      setBookDetails({
+        status: 'planning',
+        currentPage: 0,
+        rating: 0,
+        timesRead: 0
+      });
+    } catch (error) {
+      console.error('Error adding book:', error);
+    }
+  };
+
+  const handleEditClick = (book: Book) => {
+    setSelectedBookForEdit(book);
+    setSelectedGenres(book.genres || []);
+    setEditDialogOpen(true);
+  };
+
+  const handleStatusChange = (newStatus: ReadingStatus) => {
+    if (!selectedBookForEdit) return;
+    setSelectedBookForEdit({
+      ...selectedBookForEdit,
+      status: newStatus
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!currentUser || !selectedBookForEdit) return;
+
+    try {
+      const bookRef = doc(db, 'users', currentUser.uid, 'books', selectedBookForEdit.id);
+      await updateDoc(bookRef, {
+        ...selectedBookForEdit,
+        genres: selectedGenres,
+        updatedAt: new Date().toISOString(),
+      });
+      setEditDialogOpen(false);
+      setSelectedBookForEdit(null);
+      setSelectedGenres([]);
+    } catch (error) {
+      console.error('Error updating book:', error);
+    }
+  };
+
+  const handleDeleteClick = async () => {
+    if (!currentUser || !selectedBookForEdit) return;
+
+    try {
+      const bookRef = doc(db, 'users', currentUser.uid, 'books', selectedBookForEdit.id);
+      await deleteDoc(bookRef);
+      setEditDialogOpen(false);
+      setSelectedBookForEdit(null);
+    } catch (error) {
+      console.error('Error deleting book:', error);
+    }
+  };
+
+  const handleBookSelect = (book: BookSearchResult) => {
+    setSelectedBook(book);
+    setBookDetails({
+      status: 'planning',
+      currentPage: 0,
+      rating: 0,
+      timesRead: 0
+    });
+    setDialogOpen(true);
+  };
+
+  if (isLoading) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -415,7 +249,7 @@ const Tracker: React.FC = () => {
     );
   }
 
-  if (booksError) {
+  if (error) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -427,7 +261,7 @@ const Tracker: React.FC = () => {
         p: 3
       }}>
         <Typography variant="h6" color="error">
-          Error loading books: {booksError}
+          {`Error loading books: ${error}`}
         </Typography>
       </Box>
     );
@@ -435,7 +269,7 @@ const Tracker: React.FC = () => {
 
   return (
     <Box 
-      data-component="tracker"
+      data-component="book-tracker"
       sx={{ 
         p: 3,
         height: 'calc(100vh - 64px)',
@@ -504,7 +338,7 @@ const Tracker: React.FC = () => {
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
-                  onClick={openSearchModal}
+                  onClick={() => setSearchModalOpen(true)}
                   fullWidth
                   sx={{
                     mb: 3,
@@ -1041,4 +875,4 @@ const Tracker: React.FC = () => {
   );
 };
 
-export default Tracker;
+export default BookTracker; 

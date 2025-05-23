@@ -55,3 +55,10 @@ REACT_APP_FIREBASE_APP_ID=your_app_id_here
 };
 
 export const firebaseConfig = loadEnvConfig();
+
+// TMDB API Configuration
+export const TMDB_API_KEY = process.env.REACT_APP_TMDB_API_KEY;
+
+if (!TMDB_API_KEY) {
+  console.warn('TMDB API key is not configured. Movie search functionality will not work.');
+}

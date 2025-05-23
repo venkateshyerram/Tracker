@@ -65,6 +65,9 @@
   },
   "devDependencies": {
     "@types/react-google-recaptcha": "^2.1.9",
-    "gh-pages": "^6.3.0"
+    "gh-pages": "^6.3.0",
+    "ico-endec": "^0.1.6",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.2"
   }
 }

@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, IconButton, Container } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import SearchIcon from '@mui/icons-material/Search';
-import { useSearch } from '../../contexts/SearchContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface NavbarProps {
@@ -14,7 +12,6 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
   const { user, logout } = useAuth();
-  const { openSearchModal } = useSearch();
   const [username, setUsername] = useState<string>('');
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,20 +40,26 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
 
   return (
     <AppBar position="fixed" sx={{ bgcolor: '#1a1a1a', boxShadow: 'none' }}>
-      <Container maxWidth="lg">
+      <Container maxWidth="xl">
         <Toolbar disableGutters>
           <Typography
-            variant="h6"
             component={RouterLink}
             to="/"
+            variant="h6"
+            noWrap
             sx={{
-              flexGrow: 1,
-              color: 'white',
-              textDecoration: 'none',
               fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1
+              background: 'linear-gradient(90deg, #0bceaf, #4dabf7 50%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: 1.5,
+              fontSize: { xs: '1.1rem', sm: '1.3rem', md: '1.5rem' },
+              userSelect: 'none',
+              textDecoration: 'none',
+              flexGrow: 1,
+              lineHeight: 1.2
             }}
           >
             Tracker
@@ -64,17 +67,6 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
 
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <IconButton
-                color="inherit"
-                onClick={onSearchClick}
-                sx={{
-                  '&:hover': {
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                }}
-              >
-                <SearchIcon />
-              </IconButton>
               <Button
                 component={RouterLink}
                 to="/"
@@ -99,7 +91,33 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick }) => {
                   },
                 }}
               >
-                Book Tracker
+                Books
+              </Button>
+              <Button
+                component={RouterLink}
+                to="/movie-tracker"
+                color="inherit"
+                sx={{
+                  fontWeight: location.pathname === '/movie-tracker' ? 'bold' : 'normal',
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                Movies
+              </Button>
+              <Button
+                component={RouterLink}
+                to="/tvshow-tracker"
+                color="inherit"
+                sx={{
+                  fontWeight: location.pathname === '/tvshow-tracker' ? 'bold' : 'normal',
+                  '&:hover': {
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                TV Shows
               </Button>
               <Button
                 color="inherit"

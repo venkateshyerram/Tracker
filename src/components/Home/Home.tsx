@@ -1,23 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Grid, Paper, Typography, CircularProgress, Modal, TextField, IconButton, List, ListItem, ListItemAvatar, ListItemText, Avatar, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, FormControl, InputLabel, Select, MenuItem, Rating } from '@mui/material';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, RadialLinearScale, PointElement, LineElement, Filler } from 'chart.js';
+import { Box, Container, Grid, Paper, Typography, CircularProgress, Modal, TextField, IconButton, List, ListItem, ListItemAvatar, ListItemText, Avatar, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, FormControl, InputLabel, Select, MenuItem, Rating, LinearProgress, Stack, Chip, Tooltip } from '@mui/material';
+import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip, Legend, CategoryScale, LinearScale, BarElement, RadialLinearScale, PointElement, LineElement, Filler } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
 import { Pie, Bar } from 'react-chartjs-2';
 import { useBooks } from '../../hooks/useBooks';
+import { useMovies } from '../../hooks/useMovies';
+import { useTVShows } from '../../hooks/useTVShows';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSearch } from '../../contexts/SearchContext';
 import { useQuery } from 'react-query';
 import { bookSearchService } from '../../services/bookSearchService';
 import { bookService } from '../../services/bookService';
 import { Book, ReadingStatus, BookSearchResult } from '../../types/book';
+import { Movie, MovieStatus } from '../../types/movie';
+import { TVShow, TVShowStatus } from '../../types/tvshow';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
 import SearchModal from '../shared/SearchModal';
+import { Timestamp } from 'firebase/firestore';
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, RadialLinearScale, PointElement, LineElement, Filler);
+ChartJS.register(ArcElement, ChartTooltip, Legend, CategoryScale, LinearScale, BarElement, RadialLinearScale, PointElement, LineElement, Filler);
+
+type MediaItem = 
+  | (Book & { type: 'book' })
+  | (Movie & { type: 'movie' })
+  | (TVShow & { type: 'tvshow' });
 
 const Home: React.FC = () => {
-  const { books, loading, error, getBooksByGenre, getBooksByRating, getBooksByStatus } = useBooks();
+  const { books, loading: booksLoading, error: booksError, getBooksByGenre, getBooksByRating, getBooksByStatus } = useBooks();
+  const { movies, loading: moviesLoading, error: moviesError } = useMovies();
+  const { tvshows, loading: tvshowsLoading, error: tvshowsError } = useTVShows();
   const { user } = useAuth();
   const { openSearchModal } = useSearch();
   const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
@@ -95,7 +107,7 @@ const Home: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (booksLoading || moviesLoading || tvshowsLoading) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -109,7 +121,12 @@ const Home: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (booksError || moviesError || tvshowsError) {
+    const errorMessage = typeof booksError === 'object' && booksError !== null ? String(booksError) : 
+                        typeof moviesError === 'object' && moviesError !== null ? String(moviesError) :
+                        typeof tvshowsError === 'object' && tvshowsError !== null ? String(tvshowsError) :
+                        'Unknown error';
+    
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -121,34 +138,109 @@ const Home: React.FC = () => {
         p: 3
       }}>
         <Typography variant="h6" color="error">
-          Error loading books: {error}
+          {`Error loading data: ${errorMessage}`}
         </Typography>
       </Box>
     );
   }
 
-  const genreData = getBooksByGenre();
-  const ratingData = getBooksByRating();
-  const statusData = getBooksByStatus();
-
-  console.log('Raw books data:', books);
-  console.log('Raw genre data:', genreData);
-
-  // Calculate reading statistics
+  // Book Statistics
   const completedBooks = books.filter(book => book.status === 'completed');
   const currentlyReading = books.filter(book => book.status === 'reading');
-  const totalPagesRead = completedBooks.reduce((sum, book) => sum + (book.pageCount || 0), 0);
   
-  // Calculate total reading days from account creation
-  const accountCreationDate = user?.metadata.creationTime ? new Date(user.metadata.creationTime) : new Date();
-  const today = new Date();
-  const totalReadingDays = Math.ceil((today.getTime() - accountCreationDate.getTime()) / (1000 * 60 * 60 * 24));
+  // Movie Statistics
+  const completedMovies = movies.filter(movie => movie.status === 'completed');
+  const currentlyWatching = movies.filter(movie => movie.status === 'watching');
+
+  // Type guard for Firestore Timestamp
+  const isTimestamp = (value: any): value is Timestamp => {
+    return value && typeof value === 'object' && 'toDate' in value;
+  };
+
+  // Calculate items completed per year
+  const getCompletedItemsByYear = (items: (Book | Movie)[]) => {
+    const yearCounts: { [key: string]: number } = {};
+    
+    items.forEach(item => {
+      console.log('Item updatedAt:', item.updatedAt, typeof item.updatedAt);
+      
+      let year: number | undefined;
+      try {
+        if (isTimestamp(item.updatedAt)) {
+          // Handle Firestore Timestamp
+          const date = item.updatedAt.toDate();
+          year = date.getFullYear();
+        } else if (typeof item.updatedAt === 'string') {
+          // Try parsing as a date string
+          const date = new Date(item.updatedAt);
+          if (!isNaN(date.getTime())) {
+            year = date.getFullYear();
+          }
+        } else if (typeof item.updatedAt === 'number') {
+          // Handle timestamp
+          const date = new Date(item.updatedAt);
+          if (!isNaN(date.getTime())) {
+            year = date.getFullYear();
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing date:', error);
+      }
+      
+      console.log('Extracted year:', year);
+      
+      if (year && !isNaN(year)) {
+        yearCounts[year] = (yearCounts[year] || 0) + 1;
+      }
+    });
+    
+    console.log('Final year counts:', yearCounts);
+    return yearCounts;
+  };
+
+  const booksByYear = getCompletedItemsByYear(completedBooks);
+  const moviesByYear = getCompletedItemsByYear(completedMovies);
+
+  // Calculate averages
+  const currentYear = new Date().getFullYear();
+  console.log('Current year:', currentYear);
+  console.log('Books by year:', booksByYear);
+  console.log('Movies by year:', moviesByYear);
   
-  const averagePagesPerDay = totalReadingDays > 0 ? Math.round(totalPagesRead / totalReadingDays) : 0;
-  const averageBookLength = completedBooks.length > 0 ? Math.round(totalPagesRead / completedBooks.length) : 0;
-  const averageRating = completedBooks.length > 0 
-    ? (completedBooks.reduce((sum, book) => sum + (book.rating || 0), 0) / completedBooks.length).toFixed(1)
+  const booksThisYear = booksByYear[currentYear] || 0;
+  const moviesThisYear = moviesByYear[currentYear] || 0;
+  
+  console.log('Books this year:', booksThisYear);
+  console.log('Movies this year:', moviesThisYear);
+
+  // Calculate average for previous years
+  const previousYears = Object.keys(booksByYear)
+    .map(Number)
+    .filter(year => year < currentYear);
+  
+  console.log('Previous years:', previousYears);
+  
+  const totalPreviousYears = previousYears.length;
+  const totalBooksPreviousYears = previousYears.reduce((sum, year) => sum + (booksByYear[year] || 0), 0);
+  const averageBooksPreviousYears = totalPreviousYears > 0 
+    ? Math.round(totalBooksPreviousYears / totalPreviousYears) 
     : 0;
+
+  const totalMoviesPreviousYears = previousYears.reduce((sum, year) => sum + (moviesByYear[year] || 0), 0);
+  const averageMoviesPreviousYears = totalPreviousYears > 0 
+    ? Math.round(totalMoviesPreviousYears / totalPreviousYears) 
+    : 0;
+
+  const totalYears = Math.max(
+    ...Object.keys(booksByYear).map(Number),
+    ...Object.keys(moviesByYear).map(Number)
+  ) - Math.min(
+    ...Object.keys(booksByYear).map(Number),
+    ...Object.keys(moviesByYear).map(Number)
+  ) + 1;
+
+  const averageBooksPerYear = totalYears > 0 ? Math.round(completedBooks.length / totalYears) : 0;
+  const averageMoviesPerYear = totalYears > 0 ? Math.round(completedMovies.length / totalYears) : 0;
 
   // Format numbers for display
   const formatNumber = (num: number) => {
@@ -285,21 +377,21 @@ const Home: React.FC = () => {
   };
 
   const ratingChartData = {
-    labels: Object.keys(ratingData).map(rating => `${rating} Stars`),
+    labels: Object.keys(getBooksByRating()),
     datasets: [
       {
         label: 'Books by Rating',
-        data: Object.values(ratingData),
+        data: Object.values(getBooksByRating()),
         backgroundColor: '#0bceaf',
       },
     ],
   };
 
   const statusChartData = {
-    labels: Object.keys(statusData),
+    labels: Object.keys(getBooksByStatus()),
     datasets: [
       {
-        data: Object.values(statusData),
+        data: Object.values(getBooksByStatus()),
         backgroundColor: [
           '#0bceaf',
           '#2c3e50',
@@ -365,6 +457,71 @@ const Home: React.FC = () => {
           }
         }
       }
+    }
+  };
+
+  // Progress bar colors for different media types
+  const mediaColors = {
+    book: '#0bceaf',
+    movie: '#ff6b6b',
+    tvshow: '#4dabf7'
+  };
+
+  // Calculate progress percentage
+  const calculateProgress = (item: MediaItem) => {
+    switch (item.type) {
+      case 'book':
+        return ((item.currentPage || 0) / (item.pageCount || 1)) * 100;
+      case 'movie':
+        return ((item.currentTime || 0) / (item.runtime || 1)) * 100;
+      case 'tvshow':
+        return ((item.currentEpisode || 0) / (item.numberOfEpisodes || 1)) * 100;
+      default:
+        return 0;
+    }
+  };
+
+  // Get in-progress items
+  const inProgressItems: MediaItem[] = [
+    ...books.filter(book => book.status === 'reading').map(book => ({ 
+      ...book, 
+      type: 'book' as const
+    })),
+    ...movies.filter(movie => movie.status === 'watching').map(movie => ({ 
+      ...movie, 
+      type: 'movie' as const
+    })),
+    ...tvshows.filter(show => show.status === 'watching').map(show => ({ 
+      ...show, 
+      type: 'tvshow' as const
+    }))
+  ];
+
+  // Get start date for an item
+  const getStartDate = (item: MediaItem): Date => {
+    switch (item.type) {
+      case 'book':
+        return new Date(item.startDate || item.createdAt);
+      case 'movie':
+        return new Date(item.createdAt);
+      case 'tvshow':
+        return item.createdAt;
+      default:
+        return new Date();
+    }
+  };
+
+  // Get progress text for an item
+  const getProgressText = (item: MediaItem): string => {
+    switch (item.type) {
+      case 'book':
+        return `Page ${item.currentPage || 0} / ${item.pageCount || 0}`;
+      case 'movie':
+        return `${Math.floor(item.currentTime / 60)}m / ${Math.floor(item.runtime / 60)}m`;
+      case 'tvshow':
+        return `Episode ${item.currentEpisode} / ${item.numberOfEpisodes}`;
+      default:
+        return '';
     }
   };
 
@@ -561,7 +718,7 @@ const Home: React.FC = () => {
       }}>
         <Container maxWidth="lg" sx={{ mb: 4 }}>
           <Grid container spacing={3}>
-            {/* Reading Statistics Section */}
+            {/* Combined Statistics Section */}
             <Grid item xs={12}>
               <Paper sx={{ 
                 p: 3, 
@@ -571,7 +728,7 @@ const Home: React.FC = () => {
                 boxShadow: '0 4px 15px #0bceaf26'
               }}>
                 <Typography variant="h5" gutterBottom sx={{ color: '#0bceaf' }}>
-                  Reading Statistics
+                  Reading & Watching Statistics
                 </Typography>
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6} md={3}>
@@ -636,13 +793,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {formatNumber(totalPagesRead)}
+                        {formatNumber(completedMovies.length)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Total Pages Read
+                        Movies Completed
                       </Typography>
                     </Box>
                   </Grid>
@@ -660,13 +817,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {formatNumber(averagePagesPerDay)}
+                        {formatNumber(currentlyWatching.length)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Pages Per Day
+                        Currently Watching
                       </Typography>
                     </Box>
                   </Grid>
@@ -684,13 +841,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {formatNumber(totalReadingDays)}
+                        {formatNumber(booksThisYear)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Days Since Joining
+                        Books This Year
                       </Typography>
                     </Box>
                   </Grid>
@@ -708,13 +865,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {formatNumber(averageBookLength)}
+                        {formatNumber(averageBooksPreviousYears)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Avg. Book Length
+                        Avg. Books Previous Years
                       </Typography>
                     </Box>
                   </Grid>
@@ -732,13 +889,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {averageRating}
+                        {formatNumber(moviesThisYear)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Average Rating
+                        Movies This Year
                       </Typography>
                     </Box>
                   </Grid>
@@ -756,13 +913,13 @@ const Home: React.FC = () => {
                         fontWeight: 'bold',
                         textShadow: '0 0 10px rgba(11,206,175,0.3)'
                       }}>
-                        {formatNumber(books.length)}
+                        {formatNumber(averageMoviesPreviousYears)}
                       </Typography>
                       <Typography variant="body2" sx={{ 
                         color: 'rgba(255,255,255,0.7)',
                         mt: 1
                       }}>
-                        Total Books
+                        Avg. Movies Previous Years
                       </Typography>
                     </Box>
                   </Grid>
@@ -775,14 +932,14 @@ const Home: React.FC = () => {
                 p: 2, 
                 display: 'flex', 
                 flexDirection: 'column', 
-                height: 400, 
+                height: 500,
                 bgcolor: '#1a1a1a', 
                 color: 'white',
                 position: 'relative',
                 boxShadow: '0 4px 15px #0bceaf26'
               }}>
-                <Typography variant="h6" gutterBottom>
-                  Books by Genre
+                <Typography variant="h6" gutterBottom sx={{ color: '#0bceaf' }}>
+                  Genre Distribution
                 </Typography>
                 <Box 
                   flex={1} 
@@ -802,18 +959,206 @@ const Home: React.FC = () => {
                   }}
                 >
                   <Radar 
-                    data={genreChartData} 
+                    data={{
+                      labels: Array.from(new Set([
+                        ...books.flatMap(book => book.genres || []),
+                        ...movies.flatMap(movie => movie.genres || []),
+                        ...tvshows.flatMap(show => show.genres || [])
+                      ])).sort(),
+                      datasets: [
+                        {
+                          label: 'Books',
+                          data: Array.from(new Set([
+                            ...books.flatMap(book => book.genres || []),
+                            ...movies.flatMap(movie => movie.genres || []),
+                            ...tvshows.flatMap(show => show.genres || [])
+                          ])).map(genre => {
+                            const count = books.filter(book => 
+                              book.genres?.includes(genre)
+                            ).length;
+                            const total = books.length;
+                            return total > 0 ? (count / total) * 100 : 0;
+                          }),
+                          backgroundColor: 'rgba(11, 206, 175, 0.2)',
+                          borderColor: '#0bceaf',
+                          borderWidth: 2,
+                          pointBackgroundColor: '#0bceaf',
+                          pointBorderColor: '#fff',
+                          pointHoverBackgroundColor: '#fff',
+                          pointHoverBorderColor: '#0bceaf',
+                          fill: true,
+                          tension: 0,
+                          pointRadius: 4,
+                          pointHoverRadius: 6
+                        },
+                        {
+                          label: 'Movies',
+                          data: Array.from(new Set([
+                            ...books.flatMap(book => book.genres || []),
+                            ...movies.flatMap(movie => movie.genres || []),
+                            ...tvshows.flatMap(show => show.genres || [])
+                          ])).map(genre => {
+                            const count = movies.filter(movie => 
+                              movie.genres?.includes(genre)
+                            ).length;
+                            const total = movies.length;
+                            return total > 0 ? (count / total) * 100 : 0;
+                          }),
+                          backgroundColor: 'rgba(255, 107, 107, 0.2)',
+                          borderColor: '#ff6b6b',
+                          borderWidth: 2,
+                          pointBackgroundColor: '#ff6b6b',
+                          pointBorderColor: '#fff',
+                          pointHoverBackgroundColor: '#fff',
+                          pointHoverBorderColor: '#ff6b6b',
+                          fill: true,
+                          tension: 0,
+                          pointRadius: 4,
+                          pointHoverRadius: 6
+                        },
+                        {
+                          label: 'TV Shows',
+                          data: Array.from(new Set([
+                            ...books.flatMap(book => book.genres || []),
+                            ...movies.flatMap(movie => movie.genres || []),
+                            ...tvshows.flatMap(show => show.genres || [])
+                          ])).map(genre => {
+                            const count = tvshows.filter(show => 
+                              show.genres?.includes(genre)
+                            ).length;
+                            const total = tvshows.length;
+                            return total > 0 ? (count / total) * 100 : 0;
+                          }),
+                          backgroundColor: 'rgba(77, 171, 247, 0.2)',
+                          borderColor: '#4dabf7',
+                          borderWidth: 2,
+                          pointBackgroundColor: '#4dabf7',
+                          pointBorderColor: '#fff',
+                          pointHoverBackgroundColor: '#fff',
+                          pointHoverBorderColor: '#4dabf7',
+                          fill: true,
+                          tension: 0,
+                          pointRadius: 4,
+                          pointHoverRadius: 6
+                        }
+                      ]
+                    }} 
                     options={{
-                      ...genreChartOptions,
                       maintainAspectRatio: false,
                       responsive: true,
                       layout: {
                         padding: {
-                          top: 20,
-                          right: 20,
-                          bottom: 20,
-                          left: 20
+                          top: 40,
+                          right: 40,
+                          bottom: 40,
+                          left: 40
                         }
+                      },
+                      scales: {
+                        r: {
+                          type: 'radialLinear' as const,
+                          angleLines: {
+                            display: true,
+                            color: 'rgba(255, 255, 255, 0.2)',
+                            lineWidth: 1
+                          },
+                          grid: {
+                            color: 'rgba(255, 255, 255, 0.2)',
+                            circular: true
+                          },
+                          pointLabels: {
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            font: {
+                              size: 14,
+                              weight: 'bold' as const
+                            },
+                            padding: 25,
+                            centerPointLabels: true
+                          },
+                          ticks: {
+                            color: 'rgba(255, 255, 255, 0.6)',
+                            backdropColor: 'transparent',
+                            callback: function(tickValue: number | string) {
+                              return `${tickValue}%`;
+                            },
+                            stepSize: 25,
+                            z: 1,
+                            font: {
+                              size: 12,
+                              weight: 'bold' as const
+                            }
+                          },
+                          min: 0,
+                          max: 100,
+                          beginAtZero: true,
+                          startAngle: 0,
+                          suggestedMin: 0,
+                          suggestedMax: 100
+                        }
+                      },
+                      plugins: {
+                        legend: {
+                          display: true,
+                          position: 'bottom',
+                          labels: {
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            padding: 20,
+                            font: {
+                              size: 14,
+                              weight: 'bold' as const
+                            },
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                          }
+                        },
+                        tooltip: {
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          titleColor: '#fff',
+                          bodyColor: '#fff',
+                          borderColor: '#0bceaf',
+                          borderWidth: 1,
+                          padding: 12,
+                          displayColors: true,
+                          callbacks: {
+                            label: function(context: any) {
+                              const value = context.raw || 0;
+                              const genre = context.label;
+                              const datasetLabel = context.dataset.label;
+                              let count = 0;
+                              let total = 0;
+                              
+                              if (datasetLabel === 'Books') {
+                                count = books.filter(book => book.genres?.includes(genre)).length;
+                                total = books.length;
+                              } else if (datasetLabel === 'Movies') {
+                                count = movies.filter(movie => movie.genres?.includes(genre)).length;
+                                total = movies.length;
+                              } else if (datasetLabel === 'TV Shows') {
+                                count = tvshows.filter(show => show.genres?.includes(genre)).length;
+                                total = tvshows.length;
+                              }
+                              
+                              return value > 0 
+                                ? [`${datasetLabel}: ${value.toFixed(1)}%`, `${count} ${datasetLabel.toLowerCase()} in this genre`]
+                                : [`${datasetLabel}: No items in this genre`];
+                            }
+                          }
+                        }
+                      },
+                      elements: {
+                        line: {
+                          tension: 0,
+                          borderWidth: 2
+                        },
+                        point: {
+                          radius: 5,
+                          hoverRadius: 7,
+                          hitRadius: 12
+                        }
+                      },
+                      animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuad' as const
                       }
                     }} 
                   />
@@ -825,45 +1170,33 @@ const Home: React.FC = () => {
                 p: 2, 
                 display: 'flex', 
                 flexDirection: 'column', 
-                height: 400, 
+                height: 500,
                 bgcolor: '#1a1a1a', 
                 color: 'white',
-                overflow: 'auto',
                 boxShadow: '0 4px 15px #0bceaf26'
               }}>
-                <Typography variant="h6" gutterBottom>
-                  Currently Reading
+                <Typography variant="h6" gutterBottom sx={{ color: '#0bceaf' }}>
+                  Currently
                 </Typography>
                 <Box 
                   flex={1} 
-                  display="flex" 
-                  flexWrap="wrap" 
+                  display="grid" 
+                  gridTemplateColumns="repeat(auto-fill, minmax(100px, 1fr))"
                   gap={2} 
                   p={2}
                   sx={{
-                    '&::-webkit-scrollbar': {
-                      width: '6px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      background: '#129d870d',
-                      borderRadius: '3px',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      background: '#0bceaf66',
-                      borderRadius: '3px',
-                      '&:hover': {
-                        background: '#0bceaf99',
-                      },
-                    },
+                    alignContent: 'start',
+                    overflow: 'hidden'
                   }}
                 >
+                  {/* Books */}
                   {currentlyReading.map((book) => (
                     <Box
-                      key={book.id}
+                      key={`book-${book.id}`}
                       sx={{
                         position: 'relative',
-                        width: 120,
-                        height: 180,
+                        width: '100%',
+                        paddingTop: '150%',
                         transition: 'transform 0.2s',
                         '&:hover': {
                           transform: 'scale(1.05)',
@@ -875,6 +1208,9 @@ const Home: React.FC = () => {
                         src={book.coverUrl || '/placeholder-cover.jpg'}
                         alt={book.title}
                         style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
                           width: '100%',
                           height: '100%',
                           objectFit: 'cover',
@@ -901,6 +1237,7 @@ const Home: React.FC = () => {
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
+                            fontSize: '0.7rem',
                           }}
                         >
                           {book.title}
@@ -913,6 +1250,7 @@ const Home: React.FC = () => {
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
+                            fontSize: '0.65rem',
                           }}
                         >
                           Page {book.currentPage} of {book.pageCount}
@@ -920,7 +1258,149 @@ const Home: React.FC = () => {
                       </Box>
                     </Box>
                   ))}
-                  {currentlyReading.length === 0 && (
+
+                  {/* Movies */}
+                  {currentlyWatching.map((movie) => (
+                    <Box
+                      key={`movie-${movie.id}`}
+                      sx={{
+                        position: 'relative',
+                        width: '100%',
+                        paddingTop: '150%',
+                        transition: 'transform 0.2s',
+                        '&:hover': {
+                          transform: 'scale(1.05)',
+                          zIndex: 1,
+                        },
+                      }}
+                    >
+                      <img
+                        src={movie.posterUrl || '/placeholder-cover.jpg'}
+                        alt={movie.title}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                        }}
+                      />
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+                          padding: '4px 8px',
+                          borderRadius: '0 0 4px 4px',
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'white',
+                            display: 'block',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontSize: '0.7rem',
+                          }}
+                        >
+                          {movie.title}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'rgba(255,255,255,0.7)',
+                            display: 'block',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontSize: '0.65rem',
+                          }}
+                        >
+                          {Math.floor(movie.currentTime / 60)}m / {Math.floor(movie.runtime / 60)}m
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+
+                  {/* TV Shows */}
+                  {tvshows.filter(show => show.status === 'watching').map((show) => (
+                    <Box
+                      key={`tvshow-${show.id}`}
+                      sx={{
+                        position: 'relative',
+                        width: '100%',
+                        paddingTop: '150%',
+                        transition: 'transform 0.2s',
+                        '&:hover': {
+                          transform: 'scale(1.05)',
+                          zIndex: 1,
+                        },
+                      }}
+                    >
+                      <img
+                        src={show.posterUrl || '/placeholder-cover.jpg'}
+                        alt={show.title}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                        }}
+                      />
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+                          padding: '4px 8px',
+                          borderRadius: '0 0 4px 4px',
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'white',
+                            display: 'block',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontSize: '0.7rem',
+                          }}
+                        >
+                          {show.title}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'rgba(255,255,255,0.7)',
+                            display: 'block',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontSize: '0.65rem',
+                          }}
+                        >
+                          Episode {show.currentEpisode} of {show.numberOfEpisodes}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+
+                  {currentlyReading.length === 0 && currentlyWatching.length === 0 && 
+                   tvshows.filter(show => show.status === 'watching').length === 0 && (
                     <Box
                       sx={{
                         width: '100%',
@@ -929,9 +1409,10 @@ const Home: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: 'rgba(255,255,255,0.5)',
+                        gridColumn: '1 / -1'
                       }}
                     >
-                      <Typography>No books currently being read</Typography>
+                      <Typography>No items currently in progress</Typography>
                     </Box>
                   )}
                 </Box>
@@ -940,16 +1421,352 @@ const Home: React.FC = () => {
             <Grid item xs={12}>
               <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 400, bgcolor: '#1a1a1a', color: 'white', boxShadow: '0 4px 15px #0bceaf26' }}>
                 <Typography variant="h6" gutterBottom>
-                  Reading Status
+                  Overview
                 </Typography>
-                <Box flex={1} display="flex" justifyContent="center" alignItems="center" sx={{ p: 2 }}>
-                  <Bar data={statusChartData} options={statusChartOptions} />
+                <Box flex={1} sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {/* Books Progress */}
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#0bceaf', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box sx={{ width: 6, height: 6, bgcolor: '#0bceaf', borderRadius: '50%' }} />
+                          Books
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                          Total: {books.length}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ position: 'relative', height: 12, bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                        {/* In Progress */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${(currentlyReading.length / books.length) * 100}%`,
+                            bgcolor: '#0bceaf',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {currentlyReading.length > 0 && `${currentlyReading.length}`}
+                        </Box>
+                        {/* Planning */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${(currentlyReading.length / books.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(books.filter(book => book.status === 'planning').length / books.length) * 100}%`,
+                            bgcolor: '#2c3e50',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {books.filter(book => book.status === 'planning').length > 0 && 
+                            `${books.filter(book => book.status === 'planning').length}`}
+                        </Box>
+                        {/* Completed */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${((currentlyReading.length + books.filter(book => book.status === 'planning').length) / books.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(completedBooks.length / books.length) * 100}%`,
+                            bgcolor: '#9b59b6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {completedBooks.length > 0 && `${completedBooks.length}`}
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          In Progress: {Math.round((currentlyReading.length / books.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Planning: {Math.round((books.filter(book => book.status === 'planning').length / books.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Completed: {Math.round((completedBooks.length / books.length) * 100)}%
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* Movies Progress */}
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#0bceaf', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box sx={{ width: 6, height: 6, bgcolor: '#0bceaf', borderRadius: '50%' }} />
+                          Movies
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                          Total: {movies.length}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ position: 'relative', height: 12, bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                        {/* In Progress */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${(currentlyWatching.length / movies.length) * 100}%`,
+                            bgcolor: '#0bceaf',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {currentlyWatching.length > 0 && `${currentlyWatching.length}`}
+                        </Box>
+                        {/* Planning */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${(currentlyWatching.length / movies.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(movies.filter(movie => movie.status === 'planning').length / movies.length) * 100}%`,
+                            bgcolor: '#2c3e50',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {movies.filter(movie => movie.status === 'planning').length > 0 && 
+                            `${movies.filter(movie => movie.status === 'planning').length}`}
+                        </Box>
+                        {/* Completed */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${((currentlyWatching.length + movies.filter(movie => movie.status === 'planning').length) / movies.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(completedMovies.length / movies.length) * 100}%`,
+                            bgcolor: '#9b59b6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {completedMovies.length > 0 && `${completedMovies.length}`}
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          In Progress: {Math.round((currentlyWatching.length / movies.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Planning: {Math.round((movies.filter(movie => movie.status === 'planning').length / movies.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Completed: {Math.round((completedMovies.length / movies.length) * 100)}%
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* TV Shows Progress */}
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ color: '#0bceaf', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Box sx={{ width: 6, height: 6, bgcolor: '#0bceaf', borderRadius: '50%' }} />
+                          TV Shows
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                          Total: {tvshows.length}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ position: 'relative', height: 12, bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                        {/* In Progress */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${(tvshows.filter(show => show.status === 'watching').length / tvshows.length) * 100}%`,
+                            bgcolor: '#0bceaf',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {tvshows.filter(show => show.status === 'watching').length > 0 && 
+                            `${tvshows.filter(show => show.status === 'watching').length}`}
+                        </Box>
+                        {/* Planning */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${(tvshows.filter(show => show.status === 'watching').length / tvshows.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(tvshows.filter(show => show.status === 'planning').length / tvshows.length) * 100}%`,
+                            bgcolor: '#2c3e50',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {tvshows.filter(show => show.status === 'planning').length > 0 && 
+                            `${tvshows.filter(show => show.status === 'planning').length}`}
+                        </Box>
+                        {/* Completed */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: `${((tvshows.filter(show => show.status === 'watching').length + 
+                              tvshows.filter(show => show.status === 'planning').length) / tvshows.length) * 100}%`,
+                            top: 0,
+                            height: '100%',
+                            width: `${(tvshows.filter(show => show.status === 'completed').length / tvshows.length) * 100}%`,
+                            bgcolor: '#9b59b6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            transition: 'width 0.3s ease'
+                          }}
+                        >
+                          {tvshows.filter(show => show.status === 'completed').length > 0 && 
+                            `${tvshows.filter(show => show.status === 'completed').length}`}
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          In Progress: {Math.round((tvshows.filter(show => show.status === 'watching').length / tvshows.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Planning: {Math.round((tvshows.filter(show => show.status === 'planning').length / tvshows.length) * 100)}%
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                          Completed: {Math.round((tvshows.filter(show => show.status === 'completed').length / tvshows.length) * 100)}%
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
                 </Box>
               </Paper>
             </Grid>
           </Grid>
         </Container>
       </Box>
+
+      {/* Progress Section */}
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 3, 
+          mb: 4, 
+          bgcolor: 'background.paper',
+          borderRadius: 2
+        }}
+      >
+        <Typography variant="h5" gutterBottom sx={{ color: 'text.primary', mb: 3 }}>
+          Currently In Progress
+        </Typography>
+        
+        <Stack spacing={3}>
+          {inProgressItems.map((item) => (
+            <Box key={`${item.type}-${item.id}`}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Chip 
+                    label={item.type.toUpperCase()} 
+                    size="small"
+                    sx={{ 
+                      bgcolor: mediaColors[item.type as keyof typeof mediaColors],
+                      color: 'white',
+                      fontWeight: 'bold'
+                    }}
+                  />
+                  <Typography variant="subtitle1" sx={{ color: 'text.primary' }}>
+                    {item.title}
+                  </Typography>
+                </Box>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {Math.round(calculateProgress(item))}%
+                </Typography>
+              </Box>
+              
+              <Tooltip title={`${Math.round(calculateProgress(item))}% Complete`}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={calculateProgress(item)}
+                  sx={{
+                    height: 8,
+                    borderRadius: 4,
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      bgcolor: mediaColors[item.type as keyof typeof mediaColors],
+                      borderRadius: 4
+                    }
+                  }}
+                />
+              </Tooltip>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {getProgressText(item)}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  Started {getStartDate(item).toLocaleDateString()}
+                </Typography>
+              </Box>
+            </Box>
+          ))}
+          
+          {inProgressItems.length === 0 && (
+            <Typography variant="body1" sx={{ textAlign: 'center', color: 'text.secondary', py: 4 }}>
+              No items in progress. Start reading a book, watching a movie, or binge-watching a TV show!
+            </Typography>
+          )}
+        </Stack>
+      </Paper>
     </Box>
   );
 };

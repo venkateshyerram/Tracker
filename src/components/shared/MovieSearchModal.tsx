@@ -17,18 +17,17 @@ import {
   DialogContent
 } from '@mui/material';
 import { useQuery } from 'react-query';
-import { bookSearchService } from '../../services/bookSearchService';
+import { movieSearchService, MovieSearchResult } from '../../services/movieSearchService';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
-import { BookSearchResult } from '../../types/book';
 
-interface SearchModalProps {
+interface MovieSearchModalProps {
   open: boolean;
   onClose: () => void;
-  onBookSelect: (book: BookSearchResult) => void;
+  onMovieSelect: (movie: MovieSearchResult) => void;
 }
 
-const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }) => {
+const MovieSearchModal: React.FC<MovieSearchModalProps> = ({ open, onClose, onMovieSelect }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,28 +43,23 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
     }
   }, [open]);
 
-  const { data: searchResults = [], isLoading: searchLoading } = useQuery(
-    ['searchBooks', searchQuery],
-    async () => {
-      if (!searchQuery) return [];
-      return await bookSearchService.searchBooks(searchQuery);
-    },
+  const { data: movies, isLoading, error } = useQuery(
+    ['movieSearch', searchQuery],
+    () => movieSearchService.searchMovies(searchQuery),
     {
-      enabled: !!searchQuery,
+      enabled: searchQuery.length > 0,
+      staleTime: 1000 * 60 * 5, // 5 minutes
     }
   );
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
 
   const handleClose = () => {
     setSearchQuery('');
     onClose();
   };
 
-  const handleBookSelect = (book: BookSearchResult) => {
-    onBookSelect(book);
+  const handleMovieSelect = (movie: MovieSearchResult) => {
+    onMovieSelect(movie);
+    handleClose();
   };
 
   return (
@@ -106,7 +100,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
           inputRef={searchInputRef}
           fullWidth
           variant="outlined"
-          placeholder="Search for books..."
+          placeholder="Search for movies..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           sx={{ 
@@ -170,14 +164,18 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
         },
         bgcolor: 'transparent'
       }}>
-        {searchLoading ? (
+        {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
           </Box>
-        ) : searchResults.length > 0 ? (
+        ) : error ? (
+          <Typography color="error" sx={{ textAlign: 'center', p: 3 }}>
+            Error searching for movies. Please try again.
+          </Typography>
+        ) : movies && movies.length > 0 ? (
           <List>
-            {searchResults.map((book) => (
-              <React.Fragment key={book.id}>
+            {movies.map((movie) => (
+              <React.Fragment key={movie.id}>
                 <ListItem
                   sx={{
                     '&:hover': {
@@ -188,19 +186,21 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
                   <ListItemAvatar>
                     <Avatar
                       variant="rounded"
-                      src={book.coverUrl}
-                      alt={book.title}
+                      src={movie.posterUrl}
+                      alt={movie.title}
                       sx={{ width: 60, height: 90 }}
                     />
                   </ListItemAvatar>
                   <ListItemText
-                    primary={book.title}
+                    primary={movie.title}
                     secondary={
                       <>
-                        {book.authors?.join(', ') || 'Unknown Author'}
+                        {movie.director}
+                        <br />
+                        {movie.releaseDate} • {movie.runtime} min
                         <br />
                         <Typography variant="caption" color="text.secondary">
-                          Source: {book.source}
+                          {movie.description}
                         </Typography>
                       </>
                     }
@@ -210,7 +210,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
                   />
                   <Tooltip title="Add to List">
                     <IconButton
-                      onClick={() => handleBookSelect(book)}
+                      onClick={() => handleMovieSelect(movie)}
                       color="primary"
                       size="large"
                     >
@@ -224,7 +224,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
           </List>
         ) : searchQuery ? (
           <Typography variant="body1" sx={{ textAlign: 'center', p: 4 }}>
-            No books found. Try a different search term.
+            No movies found. Try a different search term.
           </Typography>
         ) : null}
       </Box>
@@ -232,4 +232,4 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, onBookSelect }
   );
 };
 
-export default SearchModal; 
+export default MovieSearchModal; 

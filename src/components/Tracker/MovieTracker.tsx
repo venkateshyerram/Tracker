@@ -47,10 +47,9 @@ import {
   SelectChangeEvent
 } from '@mui/material';
 import { useQuery, useQueryClient } from 'react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
-import { bookService } from '../../services/bookService';
-import { Book, ReadingStatus, BookSearchResult } from '../../types/book';
+import { movieService } from '../../services/movieService';
+import { Movie, MovieStatus, MovieSearchResult } from '../../types/movie';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -59,114 +58,56 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { CircularProgress } from '@mui/material';
-import { useBooks } from '../../hooks/useBooks';
+import { useMovies } from '../../hooks/useMovies';
 import { useSearch } from '../../contexts/SearchContext';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import SortIcon from '@mui/icons-material/Sort';
-import SearchModal from '../shared/SearchModal';
-import { bookSearchService } from '../../services/bookSearchService';
+import MovieSearchModal from '../shared/MovieSearchModal';
 import SearchIcon from '@mui/icons-material/Search';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
+const STATUS_ORDER: MovieStatus[] = ['watching', 'paused', 'planning', 'completed', 're-watching'];
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`book-tabpanel-${index}`}
-      aria-labelledby={`book-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
-const STATUS_ORDER: ReadingStatus[] = ['reading', 'paused', 'planning', 'completed', 're-reading'];
-
-const Tracker: React.FC = () => {
+const MovieTracker: React.FC = () => {
   const { user } = useAuth();
-  const { books: userBooks, loading: booksLoading, error: booksError } = useBooks();
-  const { openSearchModal, closeSearchModal } = useSearch();
+  const { movies: userMovies, loading: moviesLoading, error: moviesError } = useMovies();
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
-  const [bookDetails, setBookDetails] = useState<Partial<Book>>({
+  const [selectedMovie, setSelectedMovie] = useState<MovieSearchResult | null>(null);
+  const [movieDetails, setMovieDetails] = useState<Partial<Movie>>({
     status: 'planning',
-    timesRead: 0,
+    timesWatched: 0,
     rating: 0,
-    currentPage: 0
+    currentTime: 0
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedBookForEdit, setSelectedBookForEdit] = useState<Book | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<ReadingStatus[]>(['reading', 'paused', 'planning', 'completed', 're-reading']);
-  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [selectedMovieForEdit, setSelectedMovieForEdit] = useState<Movie | null>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<MovieStatus[]>(['watching', 'paused', 'planning', 'completed', 're-watching']);
+  const [selectedDirectors, setSelectedDirectors] = useState<string[]>([]);
+  const [selectedCast, setSelectedCast] = useState<string[]>([]);
   const [yearRange, setYearRange] = useState<[number, number]>([1900, new Date().getFullYear()]);
   const [sortBy, setSortBy] = useState('title');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const queryClient = useQueryClient();
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Predefined genres
   const predefinedGenres = [
-    'Fiction',
-    'Non-Fiction',
-    'Mystery',
-    'Science Fiction',
-    'Fantasy',
-    'Romance',
-    'Thriller',
-    'Horror',
-    'Biography',
-    'History',
-    'Science',
-    'Technology',
-    'Philosophy',
-    'Psychology',
-    'Self-Help',
-    'Business',
-    'Poetry',
-    'Drama',
-    'Comedy',
-    'Adventure',
-    'Crime',
-    'Young Adult',
-    'Children',
-    'Classic',
-    'Contemporary',
-    'Literary Fiction',
-    'Historical Fiction',
-    'Dystopian',
-    'Memoir',
-    'Cookbook',
-    'Art',
-    'Music',
-    'Sports',
-    'Travel',
-    'Religion',
-    'Spirituality',
-    'Education',
-    'Reference',
-    'Other'
+    'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary',
+    'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery',
+    'Romance', 'Science Fiction', 'Thriller', 'War', 'Western', 'Biography',
+    'Sport', 'Musical', 'Film-Noir', 'Short', 'Adult'
   ];
 
-  // Get all unique genres from books
+  // Get all unique genres from movies
   const getAllGenres = () => {
-    const bookGenres = new Set<string>();
-    userBooks.forEach(book => {
-      if (book.genres) {
-        book.genres.forEach(genre => bookGenres.add(genre));
+    const movieGenres = new Set<string>();
+    userMovies.forEach(movie => {
+      if (movie.genres) {
+        movie.genres.forEach(genre => movieGenres.add(genre));
       }
     });
-    return Array.from(bookGenres);
+    return Array.from(movieGenres);
   };
 
   // Combine predefined and custom genres
@@ -174,150 +115,161 @@ const Tracker: React.FC = () => {
     const customGenres = getAllGenres();
     const combinedGenres = new Set([...predefinedGenres, ...customGenres]);
     return Array.from(combinedGenres).sort();
-  }, [userBooks]);
+  }, [userMovies]);
 
   useEffect(() => {
-    const handleBookSelected = (event: CustomEvent<BookSearchResult>) => {
-      console.log('Book selected event received:', event.detail);
-      if (window.location.pathname === '/tracker') {
-        handleBookSelect(event.detail);
-      }
+    const handleMovieSelected = (event: CustomEvent<MovieSearchResult>) => {
+      console.log('Movie selected event received:', event.detail);
+      setSelectedMovie(event.detail);
+      // Here you can add logic to save the movie to your database
     };
 
-    document.addEventListener('bookSelected', handleBookSelected as EventListener);
+    document.addEventListener('movieSelected', handleMovieSelected as EventListener);
     return () => {
-      document.removeEventListener('bookSelected', handleBookSelected as EventListener);
+      document.removeEventListener('movieSelected', handleMovieSelected as EventListener);
     };
   }, []);
 
-  // Get unique authors from books
-  const uniqueAuthors = Array.from(new Set(userBooks.map(book => book.author)));
+  // Get unique directors and cast from movies
+  const uniqueDirectors = Array.from(new Set(userMovies.map(movie => movie.director)));
+  const uniqueCast = Array.from(new Set(userMovies.flatMap(movie => movie.cast || [])));
 
-  const handleEditClick = (book: Book) => {
-    setSelectedBookForEdit(book);
-    setSelectedGenres(book.genres || []);
+  const handleEditClick = (movie: Movie) => {
+    setSelectedMovieForEdit(movie);
+    setSelectedGenres(movie.genres || []);
     setEditDialogOpen(true);
   };
 
   const handleDeleteClick = () => {
-    if (selectedBookForEdit) {
-      handleDeleteBook(selectedBookForEdit.id);
+    if (selectedMovieForEdit) {
+      handleDeleteMovie(selectedMovieForEdit.id);
       setEditDialogOpen(false);
     }
   };
 
-  const handleBookSelect = (book: BookSearchResult) => {
-    console.log('handleBookSelect called with book:', book);
-    setSelectedBook(book);
-    setBookDetails({
+  const handleMovieSelect = (movie: MovieSearchResult) => {
+    console.log('handleMovieSelect called with movie:', movie);
+    setSelectedMovie(movie);
+    setMovieDetails({
       status: 'planning',
-      timesRead: 0,
+      timesWatched: 0,
       rating: 0,
-      currentPage: 0
+      currentTime: 0
     });
-    setDialogOpen(true);
+    // Use a small delay to ensure state updates are processed
+    setTimeout(() => {
+      setDialogOpen(true);
+      console.log('Dialog should be open now');
+    }, 100);
   };
 
-  const handleAddBook = async () => {
-    if (!user || !selectedBook) return;
+  const handleAddMovie = async () => {
+    if (!user || !selectedMovie) return;
 
-    const pageCount = selectedBook.pageCount || 0;
-    console.log('Adding book:', selectedBook);
-    const newBook: Omit<Book, 'id' | 'createdAt' | 'updatedAt'> = {
-      title: selectedBook.title,
-      author: selectedBook.authors?.join(', ') || 'Unknown Author',
-      coverUrl: selectedBook.coverUrl || '',
-      description: selectedBook.description || '',
-      publishedDate: selectedBook.publishedDate || '',
-      pageCount: pageCount,
-      genres: selectedBook.genres || ['Fiction'],
-      status: bookDetails.status || 'planning',
-      currentPage: bookDetails.status === 'completed' ? pageCount : bookDetails.currentPage || 0,
-      timesRead: bookDetails.status === 'completed' ? 1 : bookDetails.timesRead || 0,
-      rating: bookDetails.rating || 0,
+    const runtime = selectedMovie.runtime || 0;
+    console.log('Adding movie:', selectedMovie);
+    const newMovie: Omit<Movie, 'id' | 'createdAt' | 'updatedAt'> = {
+      title: selectedMovie.title,
+      director: selectedMovie.director || 'Unknown Director',
+      posterUrl: selectedMovie.posterUrl || '',
+      backdropUrl: selectedMovie.backdropUrl || '',
+      description: selectedMovie.description || '',
+      releaseDate: selectedMovie.releaseDate || '',
+      runtime: runtime,
+      genres: selectedMovie.genres || ['Drama'],
+      cast: selectedMovie.cast || [],
+      status: movieDetails.status || 'planning',
+      currentTime: movieDetails.status === 'completed' ? runtime : movieDetails.currentTime || 0,
+      timesWatched: movieDetails.status === 'completed' ? 1 : movieDetails.timesWatched || 0,
+      rating: movieDetails.rating || 0,
       userId: user.uid
     };
 
     try {
-      console.log('Sending book to service:', newBook);
-      await bookService.addBook(newBook);
-      console.log('Book added successfully');
+      console.log('Sending movie to service:', newMovie);
+      await movieService.addMovie(newMovie);
+      console.log('Movie added successfully');
       setDialogOpen(false);
-      setSelectedBook(null);
-      setBookDetails({
+      setSelectedMovie(null);
+      setMovieDetails({
         status: 'planning',
-        timesRead: 0,
+        timesWatched: 0,
         rating: 0,
-        currentPage: 0
+        currentTime: 0
       });
-      queryClient.invalidateQueries(['books']);
+      queryClient.invalidateQueries(['movies']);
     } catch (error) {
-      console.error('Error adding book:', error);
+      console.error('Error adding movie:', error);
     }
   };
 
-  const handleDeleteBook = async (bookId: string) => {
+  const handleDeleteMovie = async (movieId: string) => {
     if (!user) return;
 
     try {
-      await bookService.deleteBook(bookId);
+      await movieService.deleteMovie(movieId);
+      // Invalidate the movies query to trigger a re-fetch
+      queryClient.invalidateQueries(['movies']);
+      // Close the edit dialog
+      setEditDialogOpen(false);
+      setSelectedMovieForEdit(null);
     } catch (error) {
-      console.error('Error deleting book:', error);
+      console.error('Error deleting movie:', error);
     }
   };
 
   const handleEditSave = async () => {
-    if (!selectedBookForEdit) return;
+    if (!selectedMovieForEdit) return;
 
-    const currentPage = selectedBookForEdit.status === 'completed' 
-      ? selectedBookForEdit.pageCount 
-      : selectedBookForEdit.currentPage;
+    const currentTime = selectedMovieForEdit.status === 'completed' 
+      ? selectedMovieForEdit.runtime 
+      : selectedMovieForEdit.currentTime;
 
     const updates = {
-      title: selectedBookForEdit.title,
-      author: selectedBookForEdit.author,
-      pageCount: selectedBookForEdit.pageCount,
-      status: selectedBookForEdit.status,
-      rating: selectedBookForEdit.rating,
+      title: selectedMovieForEdit.title,
+      director: selectedMovieForEdit.director,
+      runtime: selectedMovieForEdit.runtime,
+      status: selectedMovieForEdit.status,
+      rating: selectedMovieForEdit.rating,
       updatedAt: new Date().toISOString(),
-      currentPage,
-      timesRead: selectedBookForEdit.status === 'completed' ? 1 : selectedBookForEdit.timesRead,
+      currentTime,
+      timesWatched: selectedMovieForEdit.timesWatched,
       genres: selectedGenres
     };
 
     try {
-      await bookService.updateBook(selectedBookForEdit.id, updates);
+      await movieService.updateMovie(selectedMovieForEdit.id, updates);
       setEditDialogOpen(false);
-      setSelectedBookForEdit(null);
+      setSelectedMovieForEdit(null);
       setSelectedGenres([]);
-      queryClient.invalidateQueries(['books']);
+      queryClient.invalidateQueries(['movies']);
     } catch (error) {
-      console.error('Error updating book:', error);
+      console.error('Error updating movie:', error);
     }
   };
 
-  const handleStatusChange = (status: ReadingStatus) => {
-    if (!selectedBookForEdit) return;
+  const handleStatusChange = (status: MovieStatus) => {
+    if (!selectedMovieForEdit) return;
     
-    const updatedBook = {
-      ...selectedBookForEdit,
+    const updatedMovie = {
+      ...selectedMovieForEdit,
       status,
-      currentPage: status === 'completed' ? (selectedBookForEdit.pageCount || 0) : selectedBookForEdit.currentPage,
-      timesRead: status === 'completed' ? 1 : selectedBookForEdit.timesRead
+      currentTime: status === 'completed' ? (selectedMovieForEdit.runtime || 0) : selectedMovieForEdit.currentTime,
+      timesWatched: status === 'completed' ? 1 : selectedMovieForEdit.timesWatched
     };
     
-    console.log('Updating book status:', {
-      oldStatus: selectedBookForEdit.status,
+    console.log('Updating movie status:', {
+      oldStatus: selectedMovieForEdit.status,
       newStatus: status,
-      oldPage: selectedBookForEdit.currentPage,
-      newPage: updatedBook.currentPage,
-      pageCount: selectedBookForEdit.pageCount
+      oldTime: selectedMovieForEdit.currentTime,
+      newTime: updatedMovie.currentTime,
+      runtime: selectedMovieForEdit.runtime
     });
     
-    setSelectedBookForEdit(updatedBook);
+    setSelectedMovieForEdit(updatedMovie);
   };
 
-  const handleFilterStatusChange = (status: ReadingStatus) => {
+  const handleFilterStatusChange = (status: MovieStatus) => {
     setSelectedStatuses(prev =>
       prev.includes(status)
         ? prev.filter(s => s !== status)
@@ -325,11 +277,19 @@ const Tracker: React.FC = () => {
     );
   };
 
-  const handleAuthorChange = (author: string) => {
-    setSelectedAuthors(prev =>
-      prev.includes(author)
-        ? prev.filter(a => a !== author)
-        : [...prev, author]
+  const handleDirectorChange = (director: string) => {
+    setSelectedDirectors(prev =>
+      prev.includes(director)
+        ? prev.filter(d => d !== director)
+        : [...prev, director]
+    );
+  };
+
+  const handleCastChange = (actor: string) => {
+    setSelectedCast(prev =>
+      prev.includes(actor)
+        ? prev.filter(c => c !== actor)
+        : [...prev, actor]
     );
   };
 
@@ -349,33 +309,35 @@ const Tracker: React.FC = () => {
     setSelectedGenres(event.target.value as string[]);
   };
 
-  const filteredBooks = userBooks
-    .filter(book => selectedStatuses.includes(book.status))
-    .filter(book => selectedAuthors.length === 0 || selectedAuthors.includes(book.author))
-    .filter(book => {
-      const year = new Date(book.publishedDate || '').getFullYear();
+  const filteredMovies = userMovies
+    .filter(movie => selectedStatuses.includes(movie.status))
+    .filter(movie => selectedDirectors.length === 0 || selectedDirectors.includes(movie.director))
+    .filter(movie => selectedCast.length === 0 || (movie.cast && movie.cast.some(actor => selectedCast.includes(actor))))
+    .filter(movie => {
+      const year = new Date(movie.releaseDate || '').getFullYear();
       return year >= yearRange[0] && year <= yearRange[1];
     })
-    .filter(book => {
+    .filter(movie => {
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase().trim();
       return (
-        book.title.toLowerCase().includes(query) ||
-        book.author.toLowerCase().includes(query) ||
-        (book.genres && book.genres.some(genre => genre.toLowerCase().includes(query)))
+        movie.title.toLowerCase().includes(query) ||
+        movie.director.toLowerCase().includes(query) ||
+        (movie.genres && movie.genres.some(genre => genre.toLowerCase().includes(query)))
       );
     })
+    .filter(movie => selectedGenres.length === 0 || (movie.genres && movie.genres.some(genre => selectedGenres.includes(genre))))
     .sort((a, b) => {
       let comparison = 0;
       switch (sortBy) {
         case 'title':
           comparison = a.title.localeCompare(b.title);
           break;
-        case 'author':
-          comparison = a.author.localeCompare(b.author);
+        case 'director':
+          comparison = a.director.localeCompare(b.director);
           break;
         case 'year':
-          comparison = (new Date(a.publishedDate || '').getFullYear() - new Date(b.publishedDate || '').getFullYear());
+          comparison = (new Date(a.releaseDate || '').getFullYear() - new Date(b.releaseDate || '').getFullYear());
           break;
         case 'rating':
           comparison = (a.rating || 0) - (b.rating || 0);
@@ -386,22 +348,28 @@ const Tracker: React.FC = () => {
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
-  const getBooksByStatus = (status: ReadingStatus) => {
-    return filteredBooks.filter(book => book.status === status);
+  // Add a useEffect to log search results for debugging
+  useEffect(() => {
+    console.log('Search Query:', searchQuery);
+    console.log('Filtered Movies:', filteredMovies);
+  }, [searchQuery, filteredMovies]);
+
+  const getMoviesByStatus = (status: MovieStatus) => {
+    return filteredMovies.filter(movie => movie.status === status);
   };
 
-  const getStatusColor = (status: ReadingStatus) => {
-    const colors: Record<ReadingStatus, string> = {
-      reading: '#4caf50',
+  const getStatusColor = (status: MovieStatus) => {
+    const colors = {
+      watching: '#4caf50',
       paused: '#ff9800',
       planning: '#2196f3',
       completed: '#9c27b0',
-      're-reading': '#e91e63'
+      're-watching': '#e91e63'
     };
     return colors[status];
   };
 
-  if (booksLoading) {
+  if (moviesLoading) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -415,7 +383,7 @@ const Tracker: React.FC = () => {
     );
   }
 
-  if (booksError) {
+  if (moviesError) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -427,7 +395,7 @@ const Tracker: React.FC = () => {
         p: 3
       }}>
         <Typography variant="h6" color="error">
-          Error loading books: {booksError}
+          {`Error loading movies: ${moviesError}`}
         </Typography>
       </Box>
     );
@@ -435,7 +403,7 @@ const Tracker: React.FC = () => {
 
   return (
     <Box 
-      data-component="tracker"
+      data-component="movie-tracker"
       sx={{ 
         p: 3,
         height: 'calc(100vh - 64px)',
@@ -500,11 +468,11 @@ const Tracker: React.FC = () => {
                   <FilterListIcon /> Filters
                 </Typography>
 
-                {/* Add Book Button */}
+                {/* Add Movie Button */}
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
-                  onClick={openSearchModal}
+                  onClick={() => setSearchModalOpen(true)}
                   fullWidth
                   sx={{
                     mb: 3,
@@ -514,7 +482,7 @@ const Tracker: React.FC = () => {
                     },
                   }}
                 >
-                  Add Book
+                  Add Movie
                 </Button>
 
                 {/* Status Filter */}
@@ -633,7 +601,7 @@ const Tracker: React.FC = () => {
                       }}
                     >
                       <MenuItem value="title">Title</MenuItem>
-                      <MenuItem value="author">Author</MenuItem>
+                      <MenuItem value="director">Director</MenuItem>
                       <MenuItem value="year">Year</MenuItem>
                       <MenuItem value="rating">Rating</MenuItem>
                     </Select>
@@ -648,7 +616,7 @@ const Tracker: React.FC = () => {
               <Box sx={{ mb: 3 }}>
                 <TextField
                   fullWidth
-                  placeholder="Search books..."
+                  placeholder="Search movies..."
                   value={searchQuery}
                   onClick={() => setSearchModalOpen(true)}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -706,13 +674,13 @@ const Tracker: React.FC = () => {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell width="80px" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Cover</TableCell>
+                      <TableCell width="80px" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Poster</TableCell>
                       <TableCell width="20%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Title</TableCell>
-                      <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Author</TableCell>
+                      <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Director</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Genres</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Progress</TableCell>
                       <TableCell width="15%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Rating</TableCell>
-                      <TableCell width="10%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Times Read</TableCell>
+                      <TableCell width="10%" sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.1)', p: 2 }}>Times Watched</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -734,13 +702,13 @@ const Tracker: React.FC = () => {
                                   gap: 1
                                 }}
                               >
-                                {status.charAt(0).toUpperCase() + status.slice(1)} ({getBooksByStatus(status).length})
+                                {status.charAt(0).toUpperCase() + status.slice(1)} ({getMoviesByStatus(status).length})
                               </Typography>
                             </TableCell>
                           </TableRow>
-                          {getBooksByStatus(status).map((book) => (
+                          {getMoviesByStatus(status).map((movie) => (
                             <TableRow
-                              key={book.id}
+                              key={movie.id}
                               sx={{
                                 '&:hover': {
                                   bgcolor: 'rgba(255,255,255,0.05)',
@@ -751,14 +719,14 @@ const Tracker: React.FC = () => {
                                 <Box sx={{ position: 'relative', width: 60, height: 90 }}>
                                   <Avatar
                                     variant="rounded"
-                                    src={book.coverUrl}
-                                    alt={book.title}
+                                    src={movie.posterUrl}
+                                    alt={movie.title}
                                     sx={{ width: '100%', height: '100%' }}
                                   />
                                   <IconButton
                                     size="small"
                                     className="action-menu"
-                                    onClick={() => handleEditClick(book)}
+                                    onClick={() => handleEditClick(movie)}
                                     sx={{
                                       position: 'absolute',
                                       top: '50%',
@@ -790,7 +758,7 @@ const Tracker: React.FC = () => {
                                     fontWeight: 'bold'
                                   }}
                                 >
-                                  {book.title}
+                                  {movie.title}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
@@ -800,7 +768,7 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.author || 'Unknown'}
+                                  {movie.director || 'Unknown'}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
@@ -810,11 +778,11 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.genres?.join(', ') || 'Fiction'}
+                                  {movie.genres?.join(', ') || 'Drama'}
                                 </Typography>
                               </TableCell>
                               <TableCell width="15%">
-                                {book.status === 'reading' || book.status === 're-reading' || book.status === 'completed' ? (
+                                {movie.status === 'watching' || movie.status === 're-watching' || movie.status === 'completed' ? (
                                   <Typography 
                                     variant="body2" 
                                     sx={{ 
@@ -822,7 +790,7 @@ const Tracker: React.FC = () => {
                                       whiteSpace: 'nowrap',
                                     }}
                                   >
-                                    {book.currentPage} / {book.pageCount} pages
+                                    {movie.currentTime} / {movie.runtime} minutes
                                   </Typography>
                                 ) : (
                                   <Typography 
@@ -836,7 +804,7 @@ const Tracker: React.FC = () => {
                                 )}
                               </TableCell>
                               <TableCell width="15%">
-                                <Rating value={book.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
+                                <Rating value={movie.rating} readOnly size="small" sx={{ color: '#0bceaf' }} />
                               </TableCell>
                               <TableCell width="10%">
                                 <Typography 
@@ -845,7 +813,7 @@ const Tracker: React.FC = () => {
                                     color: 'rgba(255,255,255,0.7)',
                                   }}
                                 >
-                                  {book.timesRead || 0} times
+                                  {movie.timesWatched || 0} times
                                 </Typography>
                               </TableCell>
                             </TableRow>
@@ -861,7 +829,7 @@ const Tracker: React.FC = () => {
         </Container>
       </Box>
 
-      {/* Add/Edit Book Dialog */}
+      {/* Add/Edit Movie Dialog */}
       <Dialog 
         open={dialogOpen} 
         onClose={() => setDialogOpen(false)} 
@@ -869,20 +837,20 @@ const Tracker: React.FC = () => {
         fullWidth
         sx={{ zIndex: 1300 }}
       >
-        <DialogTitle>Add Book</DialogTitle>
+        <DialogTitle>Add Movie</DialogTitle>
         <DialogContent>
-          {selectedBook && (
+          {selectedMovie && (
             <Box mt={2}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
                     <Select
-                      value={bookDetails.status}
+                      value={movieDetails.status}
                       label="Status"
-                      onChange={(e) => setBookDetails({
-                        ...bookDetails,
-                        status: e.target.value as ReadingStatus
+                      onChange={(e) => setMovieDetails({
+                        ...movieDetails,
+                        status: e.target.value as MovieStatus
                       })}
                     >
                       {STATUS_ORDER.map(status => (
@@ -896,31 +864,31 @@ const Tracker: React.FC = () => {
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Current Page"
+                    label="Current Time (minutes)"
                     type="number"
-                    value={bookDetails.currentPage}
+                    value={movieDetails.currentTime}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
-                      if (value >= 0 && value <= (selectedBook.pageCount || 0)) {
-                        setBookDetails({
-                          ...bookDetails,
-                          currentPage: value
+                      if (value >= 0 && value <= (selectedMovie.runtime || 0)) {
+                        setMovieDetails({
+                          ...movieDetails,
+                          currentTime: value
                         });
                       }
                     }}
                     inputProps={{
                       min: 0,
-                      max: selectedBook.pageCount || 0
+                      max: selectedMovie.runtime || 0
                     }}
-                    helperText={`Total pages: ${selectedBook.pageCount || 'Unknown'}`}
+                    helperText={`Total runtime: ${selectedMovie.runtime || 'Unknown'} minutes`}
                   />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography component="legend">Rating</Typography>
                   <Rating
-                    value={bookDetails.rating}
-                    onChange={(_, value) => setBookDetails({
-                      ...bookDetails,
+                    value={movieDetails.rating}
+                    onChange={(_, value) => setMovieDetails({
+                      ...movieDetails,
                       rating: value || 0
                     })}
                   />
@@ -931,13 +899,13 @@ const Tracker: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddBook} variant="contained" color="primary">
-            Add Book
+          <Button onClick={handleAddMovie} variant="contained" color="primary">
+            Add Movie
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Edit Book Dialog */}
+      {/* Edit Movie Dialog */}
       <Dialog 
         open={editDialogOpen} 
         onClose={() => setEditDialogOpen(false)} 
@@ -945,18 +913,18 @@ const Tracker: React.FC = () => {
         fullWidth
         sx={{ zIndex: 1300 }}
       >
-        <DialogTitle>Edit Book</DialogTitle>
+        <DialogTitle>Edit Movie</DialogTitle>
         <DialogContent>
-          {selectedBookForEdit && (
+          {selectedMovieForEdit && (
             <Box mt={2}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
                     <Select
-                      value={selectedBookForEdit.status}
+                      value={selectedMovieForEdit.status}
                       label="Status"
-                      onChange={(e) => handleStatusChange(e.target.value as ReadingStatus)}
+                      onChange={(e) => handleStatusChange(e.target.value as MovieStatus)}
                     >
                       {STATUS_ORDER.map(status => (
                         <MenuItem key={status} value={status}>
@@ -969,31 +937,31 @@ const Tracker: React.FC = () => {
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Current Page"
+                    label="Current Time (minutes)"
                     type="number"
-                    value={selectedBookForEdit.currentPage}
+                    value={selectedMovieForEdit.currentTime}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
-                      if (value >= 0 && value <= (selectedBookForEdit.pageCount || 0)) {
-                        setSelectedBookForEdit({
-                          ...selectedBookForEdit,
-                          currentPage: value
+                      if (value >= 0 && value <= (selectedMovieForEdit.runtime || 0)) {
+                        setSelectedMovieForEdit({
+                          ...selectedMovieForEdit,
+                          currentTime: value
                         });
                       }
                     }}
                     inputProps={{
                       min: 0,
-                      max: selectedBookForEdit.pageCount || 0
+                      max: selectedMovieForEdit.runtime || 0
                     }}
-                    helperText={`Total pages: ${selectedBookForEdit.pageCount || 'Unknown'}`}
+                    helperText={`Total runtime: ${selectedMovieForEdit.runtime || 'Unknown'} minutes`}
                   />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography component="legend">Rating</Typography>
                   <Rating
-                    value={selectedBookForEdit.rating}
-                    onChange={(_, value) => setSelectedBookForEdit({
-                      ...selectedBookForEdit,
+                    value={selectedMovieForEdit.rating}
+                    onChange={(_, value) => setSelectedMovieForEdit({
+                      ...selectedMovieForEdit,
                       rating: value || 0
                     })}
                   />
@@ -1032,13 +1000,13 @@ const Tracker: React.FC = () => {
       </Dialog>
 
       {/* Search Modal */}
-      <SearchModal
+      <MovieSearchModal
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
-        onBookSelect={handleBookSelect}
+        onMovieSelect={handleMovieSelect}
       />
     </Box>
   );
 };
 
-export default Tracker;
+export default MovieTracker; 
